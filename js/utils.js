@@ -44,25 +44,15 @@ export function matrixToPose(matrix) {
 
 export function quaternionError(targetQ, currentQ) {
 
-  const qErr = currentQ.clone().invert().multiply(targetQ);
+  const qErr = targetQ.clone().multiply(currentQ.clone().invert());
 
-  // shortest rotation
-  if (qErr.w < 0) {
-    qErr.x *= -1;
-    qErr.y *= -1;
-    qErr.z *= -1;
-    qErr.w *= -1;
-  }
+  const sign = qErr.w >= 0 ? 1 : -1;
 
-  const axis = new THREE.Vector3(qErr.x, qErr.y, qErr.z);
-
-  const s = Math.sqrt(Math.max(1e-12, 1 - qErr.w * qErr.w));
-
-  if (s > 1e-6) axis.divideScalar(s);
-
-  const angle = 2 * Math.atan2(s, qErr.w);
-
-  return axis.multiplyScalar(angle);
+  return new THREE.Vector3(
+    2 * sign * qErr.x,
+    2 * sign * qErr.y,
+    2 * sign * qErr.z
+  );
 
 }
 
