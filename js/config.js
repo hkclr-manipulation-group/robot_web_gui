@@ -7,7 +7,7 @@ export const CONTINUOUS_RANGE = {
 };
 
 export const PRISMATIC_FALLBACK_RANGE = {
-  min: -10,
+  min: -10,  // 根据实际需求调整
   max: 10,
   step: 0.01
 };

@@ -8,133 +8,38 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/examples/jsm/":"https://unpkg.com/three@0.160.0/examples/jsm/",
+      "urdf-loader":"https://unpkg.com/urdf-loader@0.12.4/src/URDFLoader.js"
     }
   }
   </script>
 </head>
 <body>
-  <div id="app">
-    <aside id="sidebar">
-      <section class="panel">
-        <h1>URDF Robot GUI</h1>
-        <div class="field">
-          <label for="urdfPath">URDF Path</label>
-          <input id="urdfPath" type="text" value="./urdf/robot.urdf" />
-        </div>
-        <div class="button-row">
-          <button id="loadBtn">Load URDF</button>
-          <button id="resetViewBtn" class="secondary">Reset View</button>
-        </div>
-        <p class="hint">
-          Put your robot URDF under <code>./urdf/</code>. Mesh paths in the URDF should be relative when possible.
-        </p>
-      </section>
 
-      <section class="panel">
-        <h2>Robot Control</h2>
-        <div class="button-row wrap">
-          <button id="zeroBtn" class="secondary">Zero All</button>
-          <button id="homeBtn">Home</button>
-          <button id="stopBtn" class="danger">Stop</button>
-        </div>
-        <p class="hint">
-          These buttons call placeholder HTTP APIs. Edit <code>js/api.js</code> to connect your real robot.
-        </p>
-      </section>
+<div id="app">
+  <aside id="sidebar">
+    <h2>Robot</h2>
+    <input id="urdfPath" value="./urdf/robot.urdf">
+    <button id="loadBtn">Load URDF</button>
+    <hr>
+    <h3>Joint Control</h3>
+    <span id="jointCount">0 joints</span>
+    <div id="jointContainer"></div>
+    <hr>
+    <h3>Task Space</h3>
+    X <input id="tx" type="number" step="0.01">
+    Y <input id="ty" type="number" step="0.01">
+    Z <input id="tz" type="number" step="0.01">
+    <button id="movePoseBtn">Move Pose</button>
+  </aside>
 
-      <section class="panel">
-        <div class="section-head">
-          <h2>Task Space</h2>
-          <span class="muted">pose target</span>
-        </div>
-        <div class="pose-grid">
-          <div class="field">
-            <label for="tx">X</label>
-            <input id="tx" type="number" step="0.001" value="0.300" />
-          </div>
-          <div class="field">
-            <label for="ty">Y</label>
-            <input id="ty" type="number" step="0.001" value="0.000" />
-          </div>
-          <div class="field">
-            <label for="tz">Z</label>
-            <input id="tz" type="number" step="0.001" value="0.300" />
-          </div>
-          <div class="field">
-            <label for="rx">Rx</label>
-            <input id="rx" type="number" step="0.001" value="0.000" />
-          </div>
-          <div class="field">
-            <label for="ry">Ry</label>
-            <input id="ry" type="number" step="0.001" value="0.000" />
-          </div>
-          <div class="field">
-            <label for="rz">Rz</label>
-            <input id="rz" type="number" step="0.001" value="0.000" />
-          </div>
-        </div>
+  <main>
+    <div id="viewer"></div>
+    <div id="status">Ready</div>
+  </main>
+</div>
 
-        <div class="button-row wrap">
-          <button id="movePoseBtn">Move Pose</button>
-          <button id="savePoseAsKeyBtn" class="secondary">Save as Key</button>
-          <button id="readPoseBtn" class="secondary">Read Current</button>
-        </div>
-
-        <p class="hint">
-          Task-space control sends a target pose to the backend. Frontend alone does not solve IK.
-        </p>
-      </section>
-
-      <section class="panel">
-        <div class="section-head">
-          <h2>Key Points</h2>
-          <span id="keypointCount" class="muted">0 points</span>
-        </div>
-
-        <div class="button-row wrap">
-          <button id="clearKeysBtn" class="danger">Clear</button>
-          <button id="saveKeysBtn" class="secondary">Save Local</button>
-          <button id="loadKeysBtn" class="secondary">Load Local</button>
-        </div>
-
-        <div id="keypointList" class="list-box"></div>
-      </section>
-
-      <section class="panel">
-        <div class="section-head">
-          <h2>Path Planning</h2>
-          <span id="pathCount" class="muted">0 path points</span>
-        </div>
-
-        <div class="field">
-          <label for="interpSteps">Interpolation Steps / Segment</label>
-          <input id="interpSteps" type="number" min="2" step="1" value="20" />
-        </div>
-
-        <div class="button-row wrap">
-          <button id="generatePathBtn">Generate Path</button>
-          <button id="runPathBtn">Run Path</button>
-          <button id="clearPathBtn" class="danger">Clear Path</button>
-        </div>
-
-        <div class="button-row wrap">
-          <button id="exportPathBtn" class="secondary">Export JSON</button>
-          <button id="importPathBtn" class="secondary">Import JSON</button>
-          <input id="importPathFile" type="file" accept=".json" class="hidden" />
-        </div>
-
-        <div id="pathList" class="list-box compact"></div>
-      </section>
-    </aside>
-
-    <main id="viewerPane">
-      <div id="viewer"></div>
-      <div id="status" class="status">Ready</div>
-    </main>
-  </div>
-
-  <script type="module" src="./js/main.js"></script>
+<script type="module" src="./js/main.js"></script>
 </body>
 </html>
