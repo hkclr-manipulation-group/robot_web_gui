@@ -3,15 +3,10 @@ import {
   PRISMATIC_FALLBACK_RANGE,
   ROTARY_FALLBACK_RANGE,
 } from './config.js';
+import { clamp, cssSafe, formatJointValue } from './utils.js';
 
 export class JointsUI {
   constructor(container, countElement, callbacks) {
-    // 确保 container 和 countElement 被正确初始化
-    if (!container || !countElement) {
-      console.error('Container or CountElement is null or undefined.');
-      return;
-    }
-
     this.container = container;
     this.countElement = countElement;
     this.callbacks = callbacks;
@@ -19,58 +14,52 @@ export class JointsUI {
   }
 
   clear() {
-    if (this.container) {
-      this.container.innerHTML = '';
-    }
-    if (this.countElement) {
-      this.countElement.textContent = '0 joints';
-    }
+    if (this.container) this.container.innerHTML = '';
+    if (this.countElement) this.countElement.textContent = '0 joints';
     this.jointMap = {};
   }
 
   build(robot) {
     this.clear();
+    if (!this.container || !robot) return;
     const joints = robot.joints || {};
     const names = Object.keys(joints).filter((name) => {
       const jt = joints[name]?.jointType;
       return jt === 'revolute' || jt === 'continuous' || jt === 'prismatic';
     });
 
-    if (this.countElement) {
-      this.countElement.textContent = `${names.length} joints`;
-    }
+    if (this.countElement) this.countElement.textContent = `${names.length} joints`;
 
     if (names.length === 0) {
-      if (this.container) {
-        this.container.innerHTML = '<div class="muted">No controllable joints found.</div>';
-      }
+      this.container.innerHTML = '<div class="muted">No controllable joints found.</div>';
       return;
     }
 
     names.forEach((name) => {
       const joint = joints[name];
       this.jointMap[name] = joint;
-      const card = this.#createJointCard(name, joint);
-      if (this.container) {
-        this.container.appendChild(card);
-      }
+      this.container.appendChild(this.#createJointCard(name, joint));
     });
   }
 
   setJointValue(name, value, updateUi = true) {
     const joint = this.jointMap[name];
     if (!joint) return;
-
     if (typeof joint.setJointValue === 'function') joint.setJointValue(value);
     else joint.angle = value;
 
     if (updateUi) {
-      const slider = document.getElementById(`slider-${cssSafe(name)}`);
-      const valueEl = document.getElementById(`value-${cssSafe(name)}`);
+      const safe = cssSafe(name);
+      const slider = document.getElementById(`slider-${safe}`);
+      const valueEl = document.getElementById(`value-${safe}`);
       const isPrismatic = joint.jointType === 'prismatic';
       if (slider) slider.value = String(value);
       if (valueEl) valueEl.textContent = formatJointValue(value, isPrismatic);
     }
+  }
+
+  setValuesByMap(map, updateUi = true) {
+    Object.entries(map).forEach(([name, value]) => this.setJointValue(name, value, updateUi));
   }
 
   zeroAll() {
@@ -110,6 +99,7 @@ export class JointsUI {
       const value = parseFloat(event.target.value);
       this.setJointValue(name, value, false);
       valueEl.textContent = formatJointValue(value, isPrismatic);
+      this.callbacks?.onJointInput?.(name, value);
     });
 
     slider.addEventListener('change', async (event) => {
@@ -126,47 +116,15 @@ export class JointsUI {
 
   #getRange(joint) {
     const type = joint.jointType;
-
     if (type === 'continuous') return CONTINUOUS_RANGE;
-
     const fallback = type === 'prismatic' ? PRISMATIC_FALLBACK_RANGE : ROTARY_FALLBACK_RANGE;
-
     let min = fallback.min;
     let max = fallback.max;
     const step = fallback.step;
-
     if (joint.limit) {
       if (Number.isFinite(joint.limit.lower)) min = joint.limit.lower;
       if (Number.isFinite(joint.limit.upper)) max = joint.limit.upper;
     }
-
     return { min, max, step };
   }
 }
-
-// 使用时确保 container 和 countElement 不为 null
-document.addEventListener('DOMContentLoaded', () => {
-  const container = document.getElementById("yourContainerId");
-  const countElement = document.getElementById("yourCountElementId");
-
-  if (container && countElement) {
-    const jointsUI = new JointsUI(container, countElement, {
-      onJointCommitted: async (name, value) => {
-        console.log(`Joint ${name} committed with value: ${value}`);
-      }
-    });
-
-    // 假设机器人对象
-    const robot = {
-      joints: {
-        joint1: { jointType: 'revolute', angle: 0 },
-        joint2: { jointType: 'prismatic', angle: 10 },
-        joint3: { jointType: 'continuous', angle: 5 }
-      }
-    };
-
-    jointsUI.build(robot);
-  } else {
-    console.error('Container or CountElement not found.');
-  }
-});

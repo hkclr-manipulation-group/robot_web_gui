@@ -3,43 +3,107 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>URDF Robot Web GUI</title>
+  <title>Robot Web GUI</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
   <script type="importmap">
-  {
-    "imports": {
-      "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/examples/jsm/":"https://unpkg.com/three@0.160.0/examples/jsm/",
-      "urdf-loader":"https://unpkg.com/urdf-loader@0.12.4/src/URDFLoader.js"
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+        "urdf-loader": "https://cdn.jsdelivr.net/npm/urdf-loader@0.12.4/src/URDFLoader.js"
+      }
     }
-  }
   </script>
 </head>
 <body>
+  <header class="topbar">
+    <div>
+      <h1>Robot Web GUI</h1>
+      <div class="subtitle">URDF viewer, joint control, task-space IK, planning, teach, save/load</div>
+    </div>
+    <div class="top-actions">
+      <input id="urdfPath" value="./assets/urdf/simple6dof/simple6dof.urdf" />
+      <button id="loadUrdfBtn">Load URDF</button>
+      <label class="inline-file">
+        <span>Open URDF</span>
+        <input id="urdfFile" type="file" accept=".urdf,.xml" />
+      </label>
+    </div>
+  </header>
 
-<div id="app">
-  <aside id="sidebar">
-    <h2>Robot</h2>
-    <input id="urdfPath" value="./urdf/robot.urdf">
-    <button id="loadBtn">Load URDF</button>
-    <hr>
-    <h3>Joint Control</h3>
-    <span id="jointCount">0 joints</span>
-    <div id="jointContainer"></div>
-    <hr>
-    <h3>Task Space</h3>
-    X <input id="tx" type="number" step="0.01">
-    Y <input id="ty" type="number" step="0.01">
-    Z <input id="tz" type="number" step="0.01">
-    <button id="movePoseBtn">Move Pose</button>
-  </aside>
+  <main class="layout">
+    <section class="viewer-panel">
+      <div class="viewer-toolbar">
+        <span id="status">Ready.</span>
+        <div class="viewer-buttons">
+          <button id="fitBtn">Fit</button>
+          <button id="homeBtn">Home</button>
+          <button id="stopBtn" class="danger">Stop</button>
+          <button id="zeroBtn">Zero</button>
+        </div>
+      </div>
+      <div id="viewer"></div>
+      <div class="pose-bar">
+        <strong>EE Pose:</strong>
+        <span id="eePose">x=0.000 y=0.000 z=0.000 r=0.0 p=0.0 y=0.0</span>
+      </div>
+    </section>
 
-  <main>
-    <div id="viewer"></div>
-    <div id="status">Ready</div>
+    <aside class="sidebar">
+      <section class="card">
+        <div class="card-title-row">
+          <h2>Robot</h2>
+          <span id="jointCount">0 joints</span>
+        </div>
+        <div class="meta-grid">
+          <div><span class="label">Base</span><span id="baseLink">-</span></div>
+          <div><span class="label">Tip</span><span id="tipLink">-</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>Joint Control</h2>
+          <button id="refreshPoseBtn">Refresh</button>
+        </div>
+        <div id="jointContainer" class="joint-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>Task Space</h2>
+          <span>6-DoF</span>
+        </div>
+        <div id="taskSpaceContainer"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-title-row">
+          <h2>Planning & Teach</h2>
+          <span id="teachCount">0 poses</span>
+        </div>
+        <div class="planner-grid">
+          <label>Steps<input id="planSteps" type="number" min="2" max="500" value="50" /></label>
+          <label>Delay ms<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
+        </div>
+        <div class="button-grid">
+          <button id="recordPoseBtn">Record Pose</button>
+          <button id="planJointBtn">Plan Joint</button>
+          <button id="planCartesianBtn">Plan Cartesian</button>
+          <button id="playPathBtn">Play Path</button>
+          <button id="savePathBtn">Save Path</button>
+          <label class="inline-file slim">
+            <span>Load Path</span>
+            <input id="pathFile" type="file" accept=".json" />
+          </label>
+          <button id="clearPathBtn">Clear Path</button>
+        </div>
+        <pre id="pathPreview" class="path-preview">[]</pre>
+      </section>
+    </aside>
   </main>
-</div>
 
-<script type="module" src="./js/main.js"></script>
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>
