@@ -1,3 +1,23 @@
+// config.js
+
+export const CONTINUOUS_RANGE = {
+  min: -Math.PI,
+  max: Math.PI,
+  step: 0.01
+};
+
+export const PRISMATIC_FALLBACK_RANGE = {
+  min: -10,   // 根据实际需求调整
+  max: 10,
+  step: 0.01
+};
+
+export const ROTARY_FALLBACK_RANGE = {
+  min: -Math.PI,
+  max: Math.PI,
+  step: 0.01
+};
+
 export const DEFAULT_URDF_PATH = "./urdf/robot.urdf";
 
 export const STORAGE_KEYS = {
@@ -17,22 +37,4 @@ export const API_ENDPOINTS = {
   zero: "/api/zero",
   movePose: "/api/move_pose",
   getCurrentPose: "/api/current_pose"
-};
-
-export const CONTINUOUS_RANGE = {
-  min: -Math.PI,
-  max: Math.PI,
-  step: 0.01
-};
-
-export const PRISMATIC_FALLBACK_RANGE = {
-  min: -10,
-  max: 10,
-  step: 0.01
-};
-
-export const ROTARY_FALLBACK_RANGE = {
-  min: -Math.PI,
-  max: Math.PI,
-  step: 0.01
 };
