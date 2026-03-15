@@ -66,14 +66,23 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     );
   },
   onMove: (pose) => {
-    if (!kinematics) return;
-    const result = kinematics.solveIK(pose);
-    jointsUI.setValuesByMap(
-      vectorToMap(result.q),
-      true
-    );
-    refreshPoseReadout();
-  },
+
+  if (!kinematics) return;
+
+  const q0 = kinematics.getJointPositions();
+
+  const result = kinematics.solveIK(pose, q0);
+
+  if (!result || !result.q) return;
+
+  jointsUI.setValuesByMap(
+    vectorToMap(result.q),
+    false
+  );
+
+  refreshPoseReadout();
+
+},
   onSetGoal: (pose) => {
     lastGoalPose = pose;
     setStatus(

@@ -116,21 +116,19 @@ export class TaskSpaceUI {
 
   }
 
-  #triggerIK() {
+#triggerIK() {
 
-    if (!this.callbacks?.onMove) return;
+  if (!this.callbacks?.onMove) return;
 
-    clearTimeout(this._ikTimer);
+  clearTimeout(this._ikTimer);
 
-    this._ikTimer = setTimeout(() => {
+  this._ikTimer = setTimeout(() => {
 
-      const pose = this.getPose();
+    this.callbacks.onMove(this.getPose());
 
-      this.callbacks.onMove(pose);
+  }, 30);
 
-    }, 20);
-
-  }
+}
 
   getPose() {
 
