@@ -20,12 +20,18 @@ export async function loadRobotFromUrdf(url) {
           }
         });
 
-        // 让机器人默认竖直向上
-        // 常见修正：如果当前导入后“躺平”，可以绕 X 轴旋转 -90°
-        robot.rotation.x = -Math.PI / 2;
-        robot.rotation.y = Math.PI;
+        const robotRoot = new THREE.Group();
+        robotRoot.name = "robot-root";
 
-        resolve(robot);
+        // 统一坐标修正
+        robotRoot.rotation.x = 0;
+
+        robotRoot.add(robot);
+
+        resolve({
+          robot,
+          robotRoot,
+        });
       },
       undefined,
       (error) => reject(error)
