@@ -6,34 +6,24 @@
   <title>Robot Web GUI</title>
   <link rel="stylesheet" href="./styles.css" />
   <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
-<script type="importmap">
-{
-  "imports": {
-
-    "three":
-      "https://unpkg.com/three@0.160.0/build/three.module.js",
-
-    "three/addons/":
-      "https://unpkg.com/three@0.160.0/examples/jsm/",
-
-    "three/examples/jsm/":
-      "https://unpkg.com/three@0.160.0/examples/jsm/",
-
-    "urdf-loader":
-      "https://unpkg.com/urdf-loader@0.12.4/src/URDFLoader.js"
-
-  }
-}
-</script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+        "urdf-loader": "https://cdn.jsdelivr.net/npm/urdf-loader@0.12.4/src/URDFLoader.js"
+      }
+    }
+  </script>
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>Robot Web GUI</h1>
-      <div class="subtitle">URDF viewer, joint control, task-space IK, planning, teach, save/load</div>
+      <div class="subtitle">Sticky 3D viewer, scrollable control panel, joint + task-space control, IK, teach, path playback, multi-robot gateway hooks</div>
     </div>
     <div class="top-actions">
-      <input id="urdfPath" value="./urdf/robot.urdf" />
+      <input id="urdfPath" value="./assets/urdf/simple6dof/simple6dof.urdf" />
       <button id="loadUrdfBtn">Load URDF</button>
       <label class="inline-file">
         <span>Open URDF</span>
@@ -43,47 +33,73 @@
   </header>
 
   <main class="layout">
-    <section class="viewer-panel">
+    <section class="viewer-panel card">
       <div class="viewer-toolbar">
-        <span id="status">Ready.</span>
+        <div class="status-block">
+          <span class="label">Status</span>
+          <span id="status" class="status-text">Ready.</span>
+        </div>
         <div class="viewer-buttons">
           <button id="fitBtn">Fit</button>
+          <button id="resetViewBtn">Reset View</button>
           <button id="homeBtn">Home</button>
-          <button id="stopBtn" class="danger">Stop</button>
           <button id="zeroBtn">Zero</button>
+          <button id="stopBtn" class="danger">Stop</button>
         </div>
       </div>
       <div id="viewer"></div>
       <div class="pose-bar">
-        <strong>EE Pose:</strong>
-        <span id="eePose">x=0.000 y=0.000 z=0.000 r=0.0 p=0.0 y=0.0</span>
+        <div><strong>EE Pose</strong><span id="eePose">x=0.000 y=0.000 z=0.000 r=0.0 p=0.0 y=0.0</span></div>
+        <div><strong>Robot</strong><span id="activeRobotText">Preview Only</span></div>
       </div>
     </section>
 
     <aside class="sidebar">
       <section class="card">
         <div class="card-title-row">
-          <h2>Robot</h2>
-          <span id="jointCount">0 joints</span>
+          <h2>Robot Manager</h2>
+          <span id="connectionBadge" class="badge badge-muted">preview</span>
         </div>
-        <div class="meta-grid">
+        <div class="stack-grid">
+          <label>Robot
+            <select id="robotSelect"></select>
+          </label>
+          <label>Gateway URL
+            <input id="gatewayUrl" type="text" placeholder="http://127.0.0.1:9000" />
+          </label>
+        </div>
+        <div class="button-grid compact-gap">
+          <button id="saveGatewayBtn">Save Gateway</button>
+          <button id="connectBtn">Connect</button>
+          <button id="disconnectBtn">Disconnect</button>
+          <button id="pingBtn">Ping</button>
+        </div>
+        <div class="meta-grid top-gap">
           <div><span class="label">Base</span><span id="baseLink">-</span></div>
           <div><span class="label">Tip</span><span id="tipLink">-</span></div>
+          <div><span class="label">Robot ID</span><span id="robotIdText">preview-arm</span></div>
+          <div><span class="label">Joint Count</span><span id="jointCount">0 joints</span></div>
         </div>
       </section>
 
       <section class="card">
-        <div class="card-title-row">
-          <h2>Joint Control</h2>
-          <button id="refreshPoseBtn">Refresh</button>
+        <div class="card-title-row sticky-title">
+          <h2>Joint Space</h2>
+          <div class="row-actions">
+            <button id="captureJointGoalBtn">Capture Goal</button>
+            <button id="refreshPoseBtn">Refresh</button>
+          </div>
         </div>
         <div id="jointContainer" class="joint-list"></div>
       </section>
 
       <section class="card">
-        <div class="card-title-row">
+        <div class="card-title-row sticky-title">
           <h2>Task Space</h2>
-          <span>6-DoF</span>
+          <div class="row-actions">
+            <button id="readCurrentPoseBtn">Read Current</button>
+            <button id="capturePoseGoalBtn">Capture Goal</button>
+          </div>
         </div>
         <div id="taskSpaceContainer"></div>
       </section>
@@ -94,8 +110,8 @@
           <span id="teachCount">0 poses</span>
         </div>
         <div class="planner-grid">
-          <label>Steps<input id="planSteps" type="number" min="2" max="500" value="50" /></label>
-          <label>Delay ms<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
+          <label>Plan Steps<input id="planSteps" type="number" min="2" max="400" value="50" /></label>
+          <label>Play Delay (ms)<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
         </div>
         <div class="button-grid">
           <button id="recordPoseBtn">Record Pose</button>

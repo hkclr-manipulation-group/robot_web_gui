@@ -12,49 +12,25 @@ export function formatJointValue(value, isPrismatic = false) {
   return isPrismatic ? `${Number(value).toFixed(4)} m` : `${THREE.MathUtils.radToDeg(Number(value)).toFixed(2)}°`;
 }
 
-export function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function formatJointInput(value, isPrismatic = false) {
+  return isPrismatic ? Number(value).toFixed(4) : THREE.MathUtils.radToDeg(Number(value)).toFixed(2);
 }
 
-export function poseToObject(position, euler) {
-  return {
-    x: position.x,
-    y: position.y,
-    z: position.z,
-    rx: euler.x,
-    ry: euler.y,
-    rz: euler.z,
-  };
-}
-
-export function objectToPoseVector(pose) {
-  return [pose.x, pose.y, pose.z, pose.rx, pose.ry, pose.rz];
+export function parseJointInput(value, isPrismatic = false) {
+  const num = parseFloat(value || 0);
+  return isPrismatic ? num : THREE.MathUtils.degToRad(num);
 }
 
 export function formatPoseText(pose) {
   return `x=${pose.x.toFixed(3)} y=${pose.y.toFixed(3)} z=${pose.z.toFixed(3)} r=${THREE.MathUtils.radToDeg(pose.rx).toFixed(1)} p=${THREE.MathUtils.radToDeg(pose.ry).toFixed(1)} y=${THREE.MathUtils.radToDeg(pose.rz).toFixed(1)}`;
 }
 
-export function downloadTextFile(filename, text, mime = 'application/json') {
-  const blob = new Blob([text], { type: mime });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsText(file);
-  });
-}
-
-export function createBlobUrlFromFile(file) {
-  return URL.createObjectURL(file);
+export function poseToObject(position, euler) {
+  return { x: position.x, y: position.y, z: position.z, rx: euler.x, ry: euler.y, rz: euler.z };
 }
 
 export function matrixToPose(matrix) {
@@ -109,7 +85,6 @@ export function inverse(matrix) {
   const n = matrix.length;
   const A = matrix.map((row) => [...row]);
   const I = identity(n);
-
   for (let i = 0; i < n; i++) {
     let pivotRow = i;
     for (let r = i + 1; r < n; r++) {
@@ -118,13 +93,11 @@ export function inverse(matrix) {
     if (Math.abs(A[pivotRow][i]) < 1e-12) throw new Error('Matrix inversion failed');
     [A[i], A[pivotRow]] = [A[pivotRow], A[i]];
     [I[i], I[pivotRow]] = [I[pivotRow], I[i]];
-
     const pivot = A[i][i];
     for (let j = 0; j < n; j++) {
       A[i][j] /= pivot;
       I[i][j] /= pivot;
     }
-
     for (let r = 0; r < n; r++) {
       if (r === i) continue;
       const factor = A[r][i];
@@ -134,7 +107,6 @@ export function inverse(matrix) {
       }
     }
   }
-
   return I;
 }
 
@@ -150,4 +122,22 @@ export function dampedLeastSquares(J, error, damping = 0.1) {
 
 export function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+export function downloadTextFile(filename, text, mime = 'application/json') {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+export function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
 }

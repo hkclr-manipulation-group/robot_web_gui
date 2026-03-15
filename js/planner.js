@@ -1,49 +1,37 @@
-import * as THREE from 'three';
 import { lerp } from './utils.js';
 
 export function planJointTrajectory(startMap, goalMap, steps = 50) {
-  const keys = Object.keys(goalMap);
-  const trajectory = [];
+  const jointNames = Object.keys(startMap);
+  const out = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const pose = {};
-    keys.forEach((key) => {
-      const a = startMap[key] ?? 0;
-      const b = goalMap[key] ?? a;
-      pose[key] = lerp(a, b, t);
+    const q = {};
+    jointNames.forEach((name) => {
+      q[name] = lerp(startMap[name], goalMap[name], t);
     });
-    trajectory.push(pose);
+    out.push(q);
   }
-  return trajectory;
+  return out;
 }
 
-function slerpPose(a, b, t) {
-  const qa = new THREE.Quaternion().setFromEuler(new THREE.Euler(a.rx, a.ry, a.rz, 'XYZ'));
-  const qb = new THREE.Quaternion().setFromEuler(new THREE.Euler(b.rx, b.ry, b.rz, 'XYZ'));
-  const q = qa.clone().slerp(qb, t);
-  const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
-  return {
-    x: lerp(a.x, b.x, t),
-    y: lerp(a.y, b.y, t),
-    z: lerp(a.z, b.z, t),
-    rx: e.x,
-    ry: e.y,
-    rz: e.z,
-  };
-}
-
-export function planCartesianTrajectory(kinematics, startPose, goalPose, steps = 30) {
-  const trajectory = [];
+export function planCartesianTrajectory(kinematics, startPose, goalPose, steps = 50) {
+  const out = [];
   let qSeed = kinematics.getCurrentJointVector();
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    const pose = slerpPose(startPose, goalPose, t);
+    const pose = {
+      x: lerp(startPose.x, goalPose.x, t),
+      y: lerp(startPose.y, goalPose.y, t),
+      z: lerp(startPose.z, goalPose.z, t),
+      rx: lerp(startPose.rx, goalPose.rx, t),
+      ry: lerp(startPose.ry, goalPose.ry, t),
+      rz: lerp(startPose.rz, goalPose.rz, t),
+    };
     const result = kinematics.solveIK(pose, qSeed);
     qSeed = result.q;
-    trajectory.push(kinematics.getJointNames().reduce((acc, name, idx) => {
-      acc[name] = qSeed[idx];
-      return acc;
-    }, {}));
+    const map = {};
+    kinematics.getJointNames().forEach((name, idx) => { map[name] = result.q[idx]; });
+    out.push(map);
   }
-  return trajectory;
+  return out;
 }

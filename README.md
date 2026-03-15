@@ -1,56 +1,53 @@
 # Robot Web GUI
 
-Static browser-based robot GUI for GitHub Pages.
+A GitHub Pages friendly robot GUI with these pieces already wired together:
 
-## Included features
+- sticky 3D robot viewer
+- scrollable right-side control panel
+- URDF loading
+- joint-space control with both sliders and numeric input boxes
+- 6-DoF task-space control with both sliders and numeric input boxes
+- browser-side numerical IK
+- joint-space and Cartesian planning
+- teach, save, load, and playback of paths
+- multi-robot selector for WiFi robot setups
+- simple local gateway example for forwarding commands to real robots
 
-- URDF loading from repository path or local file
-- Automatic joint slider generation from URDF joints
-- End-effector 6D pose display
-- Task-space control with browser-side numerical IK
-- Joint trajectory planning
-- Cartesian trajectory planning via IK
-- Teach / record current pose
-- Save and load trajectory JSON
-- Path playback in browser preview mode
+## Folder structure
 
-## Important limitation
+- `index.html`, `styles.css`: UI layout and styling
+- `js/`: viewer, UI, IK, planner, teach, storage, gateway API adapter
+- `assets/urdf/simple6dof/`: sample URDF for preview
+- `server_examples/robot_gateway_server.py`: tiny local HTTP gateway example
+- `.nojekyll`: allows GitHub Pages to serve files directly
 
-This repo runs fully on the client side, so on GitHub Pages it can preview and simulate robot motion in the browser, but it **cannot directly control a local robot arm** unless you connect it to a separate backend service and replace `js/api.js`.
+## GitHub Pages deployment
 
-## Run locally
+1. Upload the whole project to a GitHub repository.
+2. Enable GitHub Pages for the repository root or `/docs` equivalent.
+3. Open the generated site URL.
+4. The default mode is preview-only. The GUI will still animate the robot locally.
 
-Because ES modules and URDF fetching need HTTP, use a local server.
+## Real robot over WiFi
 
-```bash
-python -m http.server 8000
-```
+GitHub Pages cannot directly host your robot control backend. Use a local gateway service on the same LAN as the robots.
 
-Then open:
+Example:
 
-```text
-http://127.0.0.1:8000/
-```
+- frontend: `https://<your-user>.github.io/<repo>`
+- local gateway: `http://<your-pc-ip>:9000`
+- robot A: `192.168.1.10`
+- robot B: `192.168.1.11`
 
-## Deploy to GitHub Pages
+In the GUI:
 
-1. Create a repo.
-2. Upload all files in this folder.
-3. Keep `.nojekyll` in the repository root.
-4. Enable GitHub Pages from the main branch / root.
+1. set `Gateway URL`
+2. choose the active robot from the robot selector
+3. click `Connect`
+4. move joints or send task-space commands
 
-## Files to customize
+## Notes
 
-- `assets/urdf/simple6dof/simple6dof.urdf`: sample robot
-- `js/api.js`: replace preview API with your backend
-- `js/kinematics.js`: browser IK and kinematics logic
-
-## Notes on IK
-
-The IK solver is numerical and generic enough for simple serial-chain URDFs, but it is not a full MoveIt replacement. For production hardware control, add:
-
-- collision checking
-- joint limit handling inside IK iteration
-- singularity handling
-- velocity / acceleration constraints
-- backend safety interlocks
+- The included IK is a generic damped least-squares numerical solver, meant for lightweight web control and preview.
+- Collision checking is not included.
+- For a production system, replace the demo gateway logic with your real robot protocol, safety checks, and watchdogs.

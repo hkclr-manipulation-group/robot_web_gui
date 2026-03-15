@@ -1,11 +1,11 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 export class RobotViewer {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0c1324);
+    this.scene.background = new THREE.Color(0x0b1222);
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
     this.camera.position.set(1.8, 1.3, 1.8);
@@ -17,25 +17,23 @@ export class RobotViewer {
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
     this.controls.target.set(0, 0.35, 0);
     this.controls.update();
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x223355, 1.2);
-    this.scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x1c2c4b, 1.15));
+
+    const dir = new THREE.DirectionalLight(0xffffff, 1.05);
     dir.position.set(2, 3, 2);
     dir.castShadow = true;
     this.scene.add(dir);
 
-    const grid = new THREE.GridHelper(4, 20, 0x3f6eb8, 0x24385d);
-    this.scene.add(grid);
-
-    const axes = new THREE.AxesHelper(0.35);
-    this.scene.add(axes);
+    this.scene.add(new THREE.GridHelper(4, 20, 0x3f6eb8, 0x263b64));
+    this.scene.add(new THREE.AxesHelper(0.35));
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 6),
-      new THREE.MeshPhongMaterial({ color: 0x0f1528, side: THREE.DoubleSide })
+      new THREE.MeshPhongMaterial({ color: 0x101a30, side: THREE.DoubleSide })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.001;
@@ -65,11 +63,10 @@ export class RobotViewer {
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const radius = Math.max(size.x, size.y, size.z, 0.4);
-
     this.controls.target.copy(center);
     this.camera.near = Math.max(0.01, radius / 200);
     this.camera.far = Math.max(20, radius * 20);
-    this.camera.position.copy(center.clone().add(new THREE.Vector3(radius * 1.8, radius * 1.2, radius * 1.8)));
+    this.camera.position.copy(center.clone().add(new THREE.Vector3(radius * 1.8, radius * 1.25, radius * 1.8)));
     this.camera.updateProjectionMatrix();
     this.controls.update();
   }

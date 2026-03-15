@@ -7,16 +7,16 @@ export class TeachSystem {
     this.poses.push({ ...jointMap });
   }
 
+  replaceAll(poses) {
+    this.poses = poses.map((item) => ({ ...item }));
+  }
+
   clear() {
     this.poses = [];
   }
 
-  replaceAll(poses) {
-    this.poses = poses.map((p) => ({ ...p }));
-  }
-
   getPath() {
-    return this.poses.map((p) => ({ ...p }));
+    return this.poses.map((item) => ({ ...item }));
   }
 
   get count() {

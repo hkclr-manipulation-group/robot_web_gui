@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { IK_DEFAULTS } from './config.js';
-import { dampedLeastSquares, matrixToPose, poseToObject, quaternionError, vectorNorm } from './utils.js';
+import { dampedLeastSquares, matrixToPose, quaternionError, vectorNorm } from './utils.js';
 
 function getChain(robot) {
   const joints = Object.entries(robot.joints || {})
@@ -22,16 +22,9 @@ function getTipObject(robot, chain) {
   if (robot.links && robot.links.tcp) return robot.links.tcp;
   const lastJoint = chain[chain.length - 1]?.joint;
   if (lastJoint?.children?.length) return lastJoint.children[0];
-
   let last = robot;
-  robot.traverse((obj) => {
-    if (obj.isURDFLink || obj.isObject3D) last = obj;
-  });
+  robot.traverse((obj) => { if (obj.isURDFLink || obj.isObject3D) last = obj; });
   return last;
-}
-
-function jointNames(chain) {
-  return chain.map((item) => item.name);
 }
 
 function applyJointVector(chain, q) {
@@ -57,7 +50,6 @@ function computePoseError(currentMatrix, targetPose) {
 
   const posErr = targetPos.sub(currentPos);
   const rotErr = quaternionError(targetQuat, currentQuat);
-
   return [posErr.x, posErr.y, posErr.z, rotErr.x, rotErr.y, rotErr.z];
 }
 
@@ -86,7 +78,6 @@ function computeNumericJacobian(robot, chain, tip, q, delta = 1e-4) {
 
   applyJointVector(chain, q);
   robot.updateMatrixWorld(true);
-
   return Array.from({ length: 6 }, (_, row) => cols.map((col) => col[row]));
 }
 
@@ -100,7 +91,7 @@ export class RobotKinematics {
   }
 
   getJointNames() {
-    return jointNames(this.chain);
+    return this.chain.map((item) => item.name);
   }
 
   getCurrentJointVector() {
@@ -147,7 +138,6 @@ export class RobotKinematics {
       if (posNorm < opts.positionTolerance && rotNorm < opts.orientationTolerance) {
         return { success: true, q, iterations: i, error: err };
       }
-
       const J = computeNumericJacobian(this.robot, this.chain, this.tip, q);
       const dq = dampedLeastSquares(J, err, opts.damping).map((v) => v * opts.stepScale);
       q = q.map((v, idx) => v + dq[idx]);
@@ -156,12 +146,5 @@ export class RobotKinematics {
 
     const finalError = computePoseError(this.tip.matrixWorld.clone(), targetPose);
     return { success: false, q, iterations: opts.maxIterations, error: finalError };
-  }
-
-  clonePose() {
-    return poseToObject(
-      new THREE.Vector3(this.tip.matrixWorld.elements[12], this.tip.matrixWorld.elements[13], this.tip.matrixWorld.elements[14]),
-      new THREE.Euler().setFromRotationMatrix(this.tip.matrixWorld, 'XYZ')
-    );
   }
 }
