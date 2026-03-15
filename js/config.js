@@ -1,4 +1,4 @@
-export const DEFAULT_URDF_PATH = './assets/urdf/simple6dof/simple6dof.urdf';
+export const DEFAULT_URDF_PATH = './urdf/robot.urdf';
 
 export const STORAGE_KEYS = {
   lastUrdfPath: 'robot-web-gui.lastUrdfPath',
