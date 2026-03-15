@@ -61,22 +61,28 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
 const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onReadCurrent: () => {
     if (!kinematics) return;
-    taskUI.setPose(kinematics.getEndEffectorPose());
+    taskUI.setPose(
+      kinematics.getEndEffectorPose()
+    );
   },
-  onMove: async (pose) => {
-    if (!kinematics || isBusy) return;
-    setStatus('Solving IK...', 'warn');
+  onMove: (pose) => {
+    if (!kinematics) return;
     const result = kinematics.solveIK(pose);
-    jointsUI.setValuesByMap(vectorToMap(result.q), true);
+    jointsUI.setValuesByMap(
+      vectorToMap(result.q),
+      true
+    );
     refreshPoseReadout();
-    await sendPoseCommand(pose);
-    setStatus(result.success ? 'IK move finished.' : 'IK reached an approximate solution.', result.success ? 'ok' : 'warn');
   },
   onSetGoal: (pose) => {
     lastGoalPose = pose;
-    setStatus('Task-space goal snapshot captured.', 'ok');
+    setStatus(
+      "Task-space goal snapshot captured.",
+      "ok"
+    );
   },
-  onPlanPose: () => document.getElementById('planCartesianBtn').click(),
+  onPlanPose: () =>
+    document.getElementById("planCartesianBtn").click(),
 });
 
 taskUI.build();
