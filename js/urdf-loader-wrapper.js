@@ -20,9 +20,7 @@ export async function loadRobotFromUrdf(url) {
           }
         });
 
-        // 统一坐标修正
-        robot.rotation.x = -Math.PI / 2;
-        resolve(robot);
+        resolve(robot); // 不做任何旋转
       },
       undefined,
       (error) => reject(error)
