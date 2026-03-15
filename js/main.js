@@ -59,43 +59,51 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
 });
 
 const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
+
   onReadCurrent: () => {
+
     if (!kinematics) return;
+
     taskUI.setPose(
       kinematics.getEndEffectorPose()
     );
+
   },
-onMove: (pose) => {
 
-  if (!kinematics) return;
+  onMove: (pose) => {
 
-  const q0 = kinematics.getCurrentJointVector();
+    if (!kinematics) return;
 
-  const result = kinematics.solveIK(pose, q0);
+    const q0 = kinematics.getCurrentJointVector();
 
-  if (!result || !result.q) return;
+    const result = kinematics.solveIK(pose, q0);
 
-  const map = vectorToMap(result.q);
+    if (!result || !result.q) return;
 
-  // 1️⃣ 更新 kinematics
-  kinematics.setJointVector(result.q);
+    const map = vectorToMap(result.q);
 
-  // 2️⃣ 更新 UI
-  jointsUI.setValuesByMap(map, true);
+    kinematics.setJointVector(result.q);
 
-  // 3️⃣ 更新 pose readout
-  refreshPoseReadout();
+    jointsUI.setValuesByMap(map, true);
 
-},
+    refreshPoseReadout();
+
+  },
+
   onSetGoal: (pose) => {
+
     lastGoalPose = pose;
+
     setStatus(
       "Task-space goal snapshot captured.",
       "ok"
     );
+
   },
+
   onPlanPose: () =>
     document.getElementById("planCartesianBtn").click(),
+
 });
 
 taskUI.build();
