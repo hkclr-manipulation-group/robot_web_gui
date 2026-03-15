@@ -1,4 +1,4 @@
-export const DEFAULT_URDF_PATH = './assets/urdf/simple6dof/simple6dof.urdf';
+export const DEFAULT_URDF_PATH = './urdf/robot.urdf';
 
 export const CONTINUOUS_RANGE = { min: -Math.PI, max: Math.PI, step: 0.001 };
 export const ROTARY_FALLBACK_RANGE = { min: -Math.PI, max: Math.PI, step: 0.001 };
