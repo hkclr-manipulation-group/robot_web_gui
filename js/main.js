@@ -65,21 +65,25 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
       kinematics.getEndEffectorPose()
     );
   },
-  onMove: (pose) => {
+onMove: (pose) => {
 
   if (!kinematics) return;
 
-  const q0 = kinematics.getJointPositions();
+  const q0 = kinematics.getCurrentJointVector();
 
   const result = kinematics.solveIK(pose, q0);
 
   if (!result || !result.q) return;
 
-  jointsUI.setValuesByMap(
-    vectorToMap(result.q),
-    false
-  );
+  const map = vectorToMap(result.q);
 
+  // 1️⃣ 更新 kinematics
+  kinematics.setJointVector(result.q);
+
+  // 2️⃣ 更新 UI
+  jointsUI.setValuesByMap(map, true);
+
+  // 3️⃣ 更新 pose readout
   refreshPoseReadout();
 
 },
