@@ -1,5 +1,3 @@
-export const DEFAULT_URDF_PATH = "./urdf/robot.urdf";
-
 export const CONTINUOUS_RANGE = {
   min: -Math.PI,
   max: Math.PI,
@@ -7,7 +5,7 @@ export const CONTINUOUS_RANGE = {
 };
 
 export const PRISMATIC_FALLBACK_RANGE = {
-  min: -10,   // 根据你的需要调整
+  min: -10,   // 根据实际需求调整
   max: 10,
   step: 0.01
 };
@@ -17,6 +15,8 @@ export const ROTARY_FALLBACK_RANGE = {
   max: Math.PI,
   step: 0.01
 };
+
+export const DEFAULT_URDF_PATH = "./urdf/robot.urdf";
 
 export const STORAGE_KEYS = {
   keypoints: "robot_gui_keypoints_v1",
