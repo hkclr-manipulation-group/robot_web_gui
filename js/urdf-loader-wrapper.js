@@ -24,7 +24,7 @@ export async function loadRobotFromUrdf(url) {
         robotRoot.name = "robot-root";
 
         // 统一坐标修正
-        robotRoot.rotation.x = 0;
+        robotRoot.rotation.x = -Math.PI / 2;
 
         robotRoot.add(robot);
 
