@@ -43,7 +43,7 @@ export class RobotViewer {
 
     // 添加 GridHelper (旋转到合适位置)
     const grid = new THREE.GridHelper(4, 20, 0x3f6eb8, 0x263b64);
-    grid.rotateX(Math.PI / 2);  // 旋转到 XY 面
+    // grid.rotateX(Math.PI / 2);  // 旋转到 XY 面
     this.scene.add(grid);
 
     // 添加坐标轴
