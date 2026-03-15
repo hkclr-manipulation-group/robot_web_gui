@@ -121,4 +121,3 @@ export class RobotViewer {
     this.renderer.render(this.scene, this.camera);
   }
 }
-}
