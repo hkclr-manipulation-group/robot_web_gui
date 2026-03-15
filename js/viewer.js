@@ -30,10 +30,7 @@ export class RobotViewer {
 
     this.scene.add(new THREE.GridHelper(4, 20, 0x3f6eb8, 0x263b64));
     this.scene.add(new THREE.AxesHelper(0.35));
-
-const axesHelper = new THREE.AxesHelper(0.2);
-this.scene.add(axesHelper);
-
+	
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 6),
       new THREE.MeshPhongMaterial({ color: 0x101a30, side: THREE.DoubleSide })
