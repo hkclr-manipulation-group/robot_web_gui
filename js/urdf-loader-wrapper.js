@@ -20,17 +20,11 @@ export async function loadRobotFromUrdf(url) {
           }
         });
 
-        const robotRoot = new THREE.Group();
-        robotRoot.name = "robot-root";
-
         // 统一坐标修正
-        robotRoot.rotation.x = -Math.PI / 2;
-
-        robotRoot.add(robot);
+        robot.rotation.x = -Math.PI / 2;
 
         resolve({
-          robot,
-          robotRoot,
+          robot
         });
       },
       undefined,
