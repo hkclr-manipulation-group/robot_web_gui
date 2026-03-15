@@ -255,6 +255,10 @@ button.danger {
   font-size: 12px;
 }
 
+.list-item-actions button.secondary {
+  background: var(--secondary);
+}
+
 .hidden {
   display: none;
 }
