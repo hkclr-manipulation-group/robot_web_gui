@@ -1,290 +1,38 @@
-* {
-  box-sizing: border-box;
-}
+export const DEFAULT_URDF_PATH = "./urdf/robot.urdf";
 
-:root {
-  --bg: #0b1020;
-  --panel: #111827;
-  --panel-2: #0f172a;
-  --border: #24314d;
-  --text: #e5e7eb;
-  --muted: #a5b4cc;
-  --primary: #3b82f6;
-  --secondary: #475569;
-  --danger: #ef4444;
-  --list-bg: #0b1222;
-}
+export const CONTINUOUS_RANGE = {
+  min: -Math.PI,
+  max: Math.PI,
+  step: 0.01
+};
 
-html,
-body {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  font-family: Arial, Helvetica, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-}
+export const PRISMATIC_FALLBACK_RANGE = {
+  min: -10,
+  max: 10,
+  step: 0.01
+};
 
-code {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 2px 6px;
-  border-radius: 6px;
-}
+export const ROTARY_FALLBACK_RANGE = {
+  min: -Math.PI,
+  max: Math.PI,
+  step: 0.01
+};
 
-#app {
-  display: grid;
-  grid-template-columns: 380px 1fr;
-  width: 100%;
-  height: 100%;
-}
+export const STORAGE_KEYS = {
+  keypoints: "robot_gui_keypoints_v1",
+  path: "robot_gui_path_v1",
+};
 
-#sidebar {
-  padding: 12px;
-  overflow-y: auto;
-  background: linear-gradient(180deg, #0f172a 0%, #0a1222 100%);
-  border-right: 1px solid var(--border);
-}
+export const PATH_DEFAULTS = {
+  interpolationSteps: 20,
+  runDelayMs: 80,
+};
 
-#viewerPane {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-}
-
-#viewer {
-  width: 100%;
-  height: 100%;
-  background: #000;
-}
-
-.status {
-  position: absolute;
-  left: 14px;
-  bottom: 14px;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  font-size: 13px;
-  color: #fff;
-  pointer-events: none;
-}
-
-.panel {
-  background: rgba(17, 24, 39, 0.92);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 14px;
-  margin-bottom: 14px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-}
-
-h1,
-h2 {
-  margin: 0 0 12px 0;
-  font-weight: 700;
-}
-
-h1 {
-  font-size: 24px;
-}
-
-h2 {
-  font-size: 18px;
-}
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.field {
-  margin-bottom: 10px;
-}
-
-.field label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-input[type="text"],
-input[type="number"] {
-  width: 100%;
-  height: 38px;
-  border-radius: 12px;
-  border: 1px solid #334155;
-  background: #020617;
-  color: var(--text);
-  padding: 0 12px;
-  outline: none;
-}
-
-input[type="text"]:focus,
-input[type="number"]:focus {
-  border-color: var(--primary);
-}
-
-input[type="range"] {
-  width: 100%;
-}
-
-.button-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.button-row.wrap {
-  flex-wrap: wrap;
-}
-
-button {
-  height: 40px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 12px;
-  color: white;
-  background: var(--primary);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.12s ease, opacity 0.12s ease;
-}
-
-button:hover {
-  opacity: 0.92;
-}
-
-button:active {
-  transform: translateY(1px);
-}
-
-button.secondary {
-  background: var(--secondary);
-}
-
-button.danger {
-  background: var(--danger);
-}
-
-.hint {
-  margin: 12px 0 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.muted {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.pose-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.joint-container {
-  max-height: 260px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.list-box {
-  margin-top: 10px;
-  max-height: 220px;
-  overflow-y: auto;
-  background: var(--list-bg);
-  border: 1px solid #24324d;
-  border-radius: 12px;
-  padding: 8px;
-}
-
-.list-box.compact {
-  max-height: 180px;
-}
-
-.list-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.list-item:last-child {
-  margin-bottom: 0;
-}
-
-.list-item-main {
-  min-width: 0;
-}
-
-.list-item-title {
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.list-item-desc {
-  font-size: 12px;
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.list-item-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.list-item-actions button {
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 10px;
-  font-size: 12px;
-}
-
-.list-item-actions button.secondary {
-  background: var(--secondary);
-}
-
-.hidden {
-  display: none;
-}
-
-@media (max-width: 1100px) {
-  #app {
-    grid-template-columns: 340px 1fr;
-  }
-
-  .pose-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 860px) {
-  #app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 48vh;
-  }
-
-  #sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .pose-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
+export const API_ENDPOINTS = {
+  joint: "/api/joint",
+  home: "/api/home",
+  stop: "/api/stop",
+  zero: "/api/zero",
+  movePose: "/api/move_pose",
+  getCurrentPose: "/api/current_pose"
+};

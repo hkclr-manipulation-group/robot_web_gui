@@ -1,5 +1,3 @@
-import { API_ENDPOINTS } from "./config.js";
-
 async function postJson(url, payload = {}) {
   const response = await fetch(url, {
     method: "POST",
@@ -23,30 +21,27 @@ async function postJson(url, payload = {}) {
 }
 
 export async function sendJointCommand(name, value) {
-  return postJson(API_ENDPOINTS.joint, {
-    joint: name,
-    value,
-  });
+  return postJson("/api/joint", { joint: name, value });
 }
 
 export async function sendZeroCommand() {
-  return postJson(API_ENDPOINTS.zero, {});
+  return postJson("/api/zero");
 }
 
 export async function sendHomeCommand() {
-  return postJson(API_ENDPOINTS.home, {});
+  return postJson("/api/home");
 }
 
 export async function sendStopCommand() {
-  return postJson(API_ENDPOINTS.stop, {});
+  return postJson("/api/stop");
 }
 
 export async function sendPoseCommand(pose) {
-  return postJson(API_ENDPOINTS.movePose, pose);
+  return postJson("/api/move_pose", pose);
 }
 
 export async function getCurrentPose() {
-  const response = await fetch(API_ENDPOINTS.getCurrentPose, {
+  const response = await fetch("/api/current_pose", {
     method: "GET",
   });
 
