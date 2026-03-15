@@ -11,9 +11,7 @@ const AXES = [
 ];
 
 export class TaskSpaceUI {
-
   constructor(container, callbacks) {
-
     this.container = container;
     this.callbacks = callbacks;
 
@@ -21,11 +19,9 @@ export class TaskSpaceUI {
     this.sliders = {};
 
     this._ikTimer = null;
-
   }
 
   build(initialPose = null) {
-
     if (!this.container) return;
 
     this.container.innerHTML = "";
@@ -33,8 +29,7 @@ export class TaskSpaceUI {
     const block = document.createElement("div");
     block.className = "task-block";
 
-    AXES.forEach(axis => {
-
+    AXES.forEach((axis) => {
       const limits = TASK_LIMITS[axis.key];
 
       const row = document.createElement("div");
@@ -57,27 +52,19 @@ export class TaskSpaceUI {
       input.value = 0;
 
       slider.addEventListener("input", () => {
-
         const v = parseFloat(slider.value);
-
         input.value = v.toFixed(axis.angle ? 1 : 4);
 
         this.#triggerIK();
-
       });
 
       input.addEventListener("change", () => {
-
         let v = parseFloat(input.value || 0);
-
         v = Math.min(limits.max, Math.max(limits.min, v));
-
         slider.value = v;
-
         input.value = v.toFixed(axis.angle ? 1 : 4);
 
         this.#triggerIK();
-
       });
 
       this.inputs[axis.key] = input;
@@ -88,52 +75,47 @@ export class TaskSpaceUI {
       row.appendChild(input);
 
       block.appendChild(row);
-
     });
 
     const actions = document.createElement("div");
     actions.className = "task-actions";
-
     actions.innerHTML = `
       <button id="setGoalBtn">Set Goal</button>
       <button id="planPoseBtn">Plan Cartesian</button>
       <button id="syncPoseBtn">Sync Current</button>
     `;
 
-    actions.querySelector("#setGoalBtn").onclick =
-      () => this.callbacks?.onSetGoal?.(this.getPose());
+    actions.querySelector("#setGoalBtn").onclick = () =>
+      this.callbacks?.onSetGoal?.(this.getPose());
 
-    actions.querySelector("#planPoseBtn").onclick =
-      () => this.callbacks?.onPlanPose?.(this.getPose());
+    actions.querySelector("#planPoseBtn").onclick = () =>
+      this.callbacks?.onPlanPose?.(this.getPose());
 
-    actions.querySelector("#syncPoseBtn").onclick =
-      () => this.callbacks?.onReadCurrent?.();
+    actions.querySelector("#syncPoseBtn").onclick = () =>
+      this.callbacks?.onReadCurrent?.();
 
     this.container.appendChild(block);
     this.container.appendChild(actions);
 
     if (initialPose) this.setPose(initialPose);
-
   }
 
-#triggerIK() {
+  #triggerIK() {
+    // 清除定时器并设置 IK 触发
+    if (!this.callbacks?.onMove) return;
 
-  if (!this.callbacks?.onMove) return;
+    clearTimeout(this._ikTimer);
 
-  clearTimeout(this._ikTimer);
-
-  this._ikTimer = setTimeout(() => {
-
-    this.callbacks.onMove(this.getPose());
-
-  }, 30);
-
-}
+    this._ikTimer = setTimeout(() => {
+      // 获取当前位姿并执行 IK
+      const pose = this.getPose();
+      this.callbacks.onMove(pose);
+    }, 30);
+  }
 
   getPose() {
-
+    // 返回 task space 中的当前位姿
     return {
-
       x: parseFloat(this.inputs.x.value || 0),
       y: parseFloat(this.inputs.y.value || 0),
       z: parseFloat(this.inputs.z.value || 0),
@@ -141,17 +123,14 @@ export class TaskSpaceUI {
       rx: THREE.MathUtils.degToRad(parseFloat(this.inputs.rx.value || 0)),
       ry: THREE.MathUtils.degToRad(parseFloat(this.inputs.ry.value || 0)),
       rz: THREE.MathUtils.degToRad(parseFloat(this.inputs.rz.value || 0)),
-
     };
-
   }
 
   setPose(pose) {
-
+    // 设置 task space 中的目标位姿
     if (!pose) return;
 
     const mapped = {
-
       x: pose.x,
       y: pose.y,
       z: pose.z,
@@ -159,21 +138,15 @@ export class TaskSpaceUI {
       rx: THREE.MathUtils.radToDeg(pose.rx),
       ry: THREE.MathUtils.radToDeg(pose.ry),
       rz: THREE.MathUtils.radToDeg(pose.rz),
-
     };
 
-    AXES.forEach(axis => {
-
+    AXES.forEach((axis) => {
       const v = mapped[axis.key] || 0;
 
       if (this.inputs[axis.key])
         this.inputs[axis.key].value = v.toFixed(axis.angle ? 1 : 4);
 
-      if (this.sliders[axis.key])
-        this.sliders[axis.key].value = v;
-
+      if (this.sliders[axis.key]) this.sliders[axis.key].value = v;
     });
-
   }
-
 }
