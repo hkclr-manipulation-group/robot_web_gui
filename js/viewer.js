@@ -42,7 +42,7 @@ export class RobotViewer {
 
     // ⭐ grid 默认在 XZ，需要旋转到 XY
     const grid = new THREE.GridHelper(4, 20, 0x3f6eb8, 0x263b64);
-    grid.rotateX(Math.PI / 2);
+    // grid.rotateX(Math.PI / 2);
     this.scene.add(grid);
 
     this.scene.add(new THREE.AxesHelper(0.35));
