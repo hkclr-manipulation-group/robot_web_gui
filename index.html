@@ -1,25 +1,65 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Robot Web GUI</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>URDF Robot Web GUI</title>
+  <link rel="stylesheet" href="./styles.css" />
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/controls/OrbitControls.js"></script>
-<script src="three.min.js"></script>
-
-<script src="libs/URDFClasses.js"></script>
-<script src="libs/URDFLoader.js"></script>
-
-<link rel="stylesheet" href="style.css">
-
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
-
 <body>
+  <div id="app">
+    <aside id="sidebar">
+      <section class="panel">
+        <h1>URDF Robot GUI</h1>
+        <div class="field">
+          <label for="urdfPath">URDF Path</label>
+          <input id="urdfPath" type="text" value="./urdf/robot.urdf" />
+        </div>
+        <div class="button-row">
+          <button id="loadBtn">Load URDF</button>
+          <button id="resetViewBtn" class="secondary">Reset View</button>
+        </div>
+        <p class="hint">
+          Put your robot URDF under <code>./urdf/</code>. Mesh paths in the URDF should be relative when possible.
+        </p>
+      </section>
 
-<div id="viewer"></div>
+      <section class="panel">
+        <h2>Robot Control</h2>
+        <div class="button-row wrap">
+          <button id="zeroBtn" class="secondary">Zero All</button>
+          <button id="homeBtn">Home</button>
+          <button id="stopBtn" class="danger">Stop</button>
+        </div>
+        <p class="hint">
+          These buttons call placeholder HTTP APIs. Edit <code>js/api.js</code> to connect your real robot.
+        </p>
+      </section>
 
-<script src="main.js"></script>
+      <section class="panel">
+        <div class="section-head">
+          <h2>Joint Control</h2>
+          <span id="jointCount" class="muted">0 joints</span>
+        </div>
+        <div id="jointContainer" class="joint-container"></div>
+      </section>
+    </aside>
 
+    <main id="viewerPane">
+      <div id="viewer"></div>
+      <div id="status" class="status">Ready</div>
+    </main>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>
