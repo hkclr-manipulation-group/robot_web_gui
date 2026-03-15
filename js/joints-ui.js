@@ -3,6 +3,7 @@ import {
   PRISMATIC_FALLBACK_RANGE,
   ROTARY_FALLBACK_RANGE,
 } from './config.js';
+import { clamp, cssSafe, formatJointValue } from './utils.js';
 
 export class JointsUI {
   constructor(container, countElement, callbacks) {
