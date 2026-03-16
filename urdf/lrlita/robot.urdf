@@ -45,7 +45,7 @@
     <parent link="arm_base_link"/>
     <child link="arm_L1"/>
     <axis xyz="0 0 1"/>
-    <limit effort="100" lower="-3.14159265" upper="3.14159265" velocity="5.0"/>
+    <limit effort="100" lower="-6.28" upper="6.28" velocity="5.0"/>
   </joint>
   <link name="arm_L2">
     <inertial>
@@ -68,7 +68,7 @@
     <parent link="arm_L1"/>
     <child link="arm_L2"/>
     <axis xyz="0 0 1"/>
-    <limit effort="100" lower="-1.57079632" upper="1.57079632" velocity="5.0"/>
+    <limit effort="100" lower="-6.28" upper="6.28" velocity="5.0"/>
   </joint>
   <link name="arm_L3">
     <inertial>
@@ -91,7 +91,7 @@
     <parent link="arm_L2"/>
     <child link="arm_L3"/>
     <axis xyz="0 0 1"/>
-    <limit effort="100" lower="-3.14159265" upper="3.14159265" velocity="5.0"/>
+    <limit effort="100" lower="-6.28" upper="6.28" velocity="5.0"/>
   </joint>
   <link name="arm_L4">
     <inertial>
