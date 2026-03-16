@@ -19,8 +19,8 @@ export class RobotViewer {
     this._initCamera();
     this._initControls();
     this._initLights();
-    this._initHelpers();
-    this._initTarget();
+    // this._initHelpers();
+    // this._initTarget();
 
     this._resize();
 
@@ -78,14 +78,13 @@ export class RobotViewer {
     this.orbit.target.set(0, 0, 0.35);
     this.orbit.update();
 
-/*
     this.transform = new TransformControls(
       this.camera,
       this.renderer.domElement
     );
 
     this.scene.add(this.transform);
-*/
+
     /* disable orbit while dragging */
 
     this.transform.addEventListener("dragging-changed", (e) => {
@@ -192,7 +191,7 @@ export class RobotViewer {
 
     this.scene.add(this.target);
 
-    // this.transform.attach(this.target);
+    this.transform.attach(this.target);
 
   }
 
