@@ -19,11 +19,14 @@ export class TaskSpaceUI {
 
     this.inputs = {};
     this.sliders = {};
+    this.rows = {};
 
     this._ikTimer = null;
-    this._lock = false;   // 防止 setPose → triggerIK 循环
+    this._lock = false;
 
   }
+
+  /* ---------------- build ---------------- */
 
   build(initialPose = null) {
 
@@ -33,6 +36,8 @@ export class TaskSpaceUI {
 
     const block = document.createElement("div");
     block.className = "task-block";
+
+    const fragment = document.createDocumentFragment();
 
     AXES.forEach(axis => {
 
@@ -57,14 +62,19 @@ export class TaskSpaceUI {
       input.step = limits.step;
       input.value = 0;
 
+      this.inputs[axis.key] = input;
+      this.sliders[axis.key] = slider;
+      this.rows[axis.key] = row;
+
       slider.addEventListener("input", () => {
 
         if (this._lock) return;
 
         const v = parseFloat(slider.value);
+
         input.value = v.toFixed(axis.angle ? 1 : 4);
 
-        this.#triggerIK();
+        this.#scheduleIK();
 
       });
 
@@ -73,43 +83,27 @@ export class TaskSpaceUI {
         if (this._lock) return;
 
         let v = parseFloat(input.value || 0);
+
         v = Math.min(limits.max, Math.max(limits.min, v));
 
         slider.value = v;
         input.value = v.toFixed(axis.angle ? 1 : 4);
 
-        this.#triggerIK();
+        this.#scheduleIK();
 
       });
-
-      this.inputs[axis.key] = input;
-      this.sliders[axis.key] = slider;
 
       row.appendChild(label);
       row.appendChild(slider);
       row.appendChild(input);
 
-      block.appendChild(row);
+      fragment.appendChild(row);
 
     });
 
-    const actions = document.createElement("div");
-    actions.className = "task-actions";
+    block.appendChild(fragment);
 
-    actions.innerHTML = `
-      <button id="setGoalBtn">Set Goal</button>
-      <button id="planPoseBtn">Plan Cartesian</button>
-      <button id="syncPoseBtn">Sync Current</button>
-    `;
-
-    actions.querySelector("#setGoalBtn").onclick =
-      () => this.callbacks?.onSetGoal?.(this.getPose());
-
-    actions.querySelector("#planPoseBtn").onclick =
-      () => this.callbacks?.onPlanPose?.(this.getPose());
-
-    actions.querySelector("#syncPoseBtn").onclick =
-      () => this.callbacks?.onReadCurrent?.();
+    const actions = this.#buildActions();
 
     this.container.appendChild(block);
     this.container.appendChild(actions);
@@ -118,7 +112,42 @@ export class TaskSpaceUI {
 
   }
 
-  #triggerIK() {
+  /* ---------------- actions ---------------- */
+
+  #buildActions() {
+
+    const actions = document.createElement("div");
+    actions.className = "task-actions";
+
+    const setBtn = document.createElement("button");
+    setBtn.textContent = "Set Goal";
+
+    const planBtn = document.createElement("button");
+    planBtn.textContent = "Plan Cartesian";
+
+    const syncBtn = document.createElement("button");
+    syncBtn.textContent = "Sync Current";
+
+    setBtn.onclick =
+      () => this.callbacks?.onSetGoal?.(this.getPose());
+
+    planBtn.onclick =
+      () => this.callbacks?.onPlanPose?.(this.getPose());
+
+    syncBtn.onclick =
+      () => this.callbacks?.onReadCurrent?.();
+
+    actions.appendChild(setBtn);
+    actions.appendChild(planBtn);
+    actions.appendChild(syncBtn);
+
+    return actions;
+
+  }
+
+  /* ---------------- IK debounce ---------------- */
+
+  #scheduleIK() {
 
     if (!this.callbacks?.onMove) return;
 
@@ -130,50 +159,79 @@ export class TaskSpaceUI {
 
       this.callbacks.onMove(pose);
 
-    }, 30);
+    }, 40); // 稍微加一点更稳定
 
   }
+
+  /* ---------------- pose getters ---------------- */
 
   getPose() {
 
-    return {
+    const pose = {};
 
-      x: parseFloat(this.inputs.x.value || 0),
-      y: parseFloat(this.inputs.y.value || 0),
-      z: parseFloat(this.inputs.z.value || 0),
+    AXES.forEach(axis => {
 
-      rx: THREE.MathUtils.degToRad(parseFloat(this.inputs.rx.value || 0)),
-      ry: THREE.MathUtils.degToRad(parseFloat(this.inputs.ry.value || 0)),
-      rz: THREE.MathUtils.degToRad(parseFloat(this.inputs.rz.value || 0)),
+      const v = parseFloat(this.inputs[axis.key]?.value || 0);
 
-    };
+      pose[axis.key] =
+        axis.angle ? THREE.MathUtils.degToRad(v) : v;
+
+    });
+
+    return pose;
 
   }
+
+  getPoseVector() {
+
+    const pose = this.getPose();
+
+    return [
+      pose.x,
+      pose.y,
+      pose.z,
+      pose.rx,
+      pose.ry,
+      pose.rz
+    ];
+
+  }
+
+  /* ---------------- pose setters ---------------- */
 
   setPose(pose) {
 
     if (!pose) return;
 
-    this._lock = true;   // 防止触发 IK
+    this._lock = true;
 
     const mapped = {
 
-      x: pose.x,
-      y: pose.y,
-      z: pose.z,
+      x: pose.x ?? 0,
+      y: pose.y ?? 0,
+      z: pose.z ?? 0,
 
-      rx: THREE.MathUtils.radToDeg(pose.rx),
-      ry: THREE.MathUtils.radToDeg(pose.ry),
-      rz: THREE.MathUtils.radToDeg(pose.rz),
+      rx: THREE.MathUtils.radToDeg(pose.rx ?? 0),
+      ry: THREE.MathUtils.radToDeg(pose.ry ?? 0),
+      rz: THREE.MathUtils.radToDeg(pose.rz ?? 0),
 
     };
 
     AXES.forEach(axis => {
 
-      const v = mapped[axis.key] || 0;
+      const limits = TASK_LIMITS[axis.key];
+
+      let v = mapped[axis.key];
+
+      if (limits) {
+
+        v = Math.min(limits.max, Math.max(limits.min, v));
+
+      }
 
       if (this.inputs[axis.key])
-        this.inputs[axis.key].value = v.toFixed(axis.angle ? 1 : 4);
+        this.inputs[axis.key].value =
+          v.toFixed(axis.angle ? 1 : 4);
 
       if (this.sliders[axis.key])
         this.sliders[axis.key].value = v;
@@ -181,6 +239,19 @@ export class TaskSpaceUI {
     });
 
     this._lock = false;
+
+  }
+
+  setPoseVector(v) {
+
+    this.setPose({
+      x: v[0],
+      y: v[1],
+      z: v[2],
+      rx: v[3],
+      ry: v[4],
+      rz: v[5],
+    });
 
   }
 

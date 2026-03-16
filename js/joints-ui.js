@@ -2,153 +2,261 @@ import {
   CONTINUOUS_RANGE,
   PRISMATIC_FALLBACK_RANGE,
   ROTARY_FALLBACK_RANGE,
-} from './config.js';
-import { clamp, cssSafe, formatJointInput, formatJointValue, parseJointInput } from './utils.js';
+} from "./config.js";
+
+import {
+  clamp,
+  cssSafe,
+  formatJointInput,
+  formatJointValue,
+  parseJointInput,
+} from "./utils.js";
 
 export class JointsUI {
   constructor(container, countElement, callbacks) {
     this.container = container;
     this.countElement = countElement;
     this.callbacks = callbacks;
+
     this.jointMap = {};
+    this.uiMap = {}; // 缓存DOM
+    this.jointNames = [];
   }
 
+  /* ---------------- clear ---------------- */
+
   clear() {
-    if (this.container) this.container.innerHTML = '';
-    if (this.countElement) this.countElement.textContent = '0 joints';
+    if (this.container) this.container.innerHTML = "";
+    if (this.countElement) this.countElement.textContent = "0 joints";
+
     this.jointMap = {};
+    this.uiMap = {};
+    this.jointNames = [];
   }
+
+  /* ---------------- build ---------------- */
 
   build(robot) {
     this.clear();
+
     if (!this.container || !robot) return;
+
     const joints = robot.joints || {};
+
     const names = Object.keys(joints).filter((name) => {
-      const jt = joints[name]?.jointType;
-      return jt === 'revolute' || jt === 'continuous' || jt === 'prismatic';
+      const type = joints[name]?.jointType;
+      return type === "revolute" || type === "continuous" || type === "prismatic";
     });
 
-    if (this.countElement) this.countElement.textContent = `${names.length} joints`;
-    if (names.length === 0) {
-      this.container.innerHTML = '<div class="label">No controllable joints found.</div>';
+    this.jointNames = names;
+
+    if (this.countElement)
+      this.countElement.textContent = `${names.length} joints`;
+
+    if (!names.length) {
+      this.container.innerHTML =
+        '<div class="label">No controllable joints found.</div>';
       return;
     }
+
+    const fragment = document.createDocumentFragment();
 
     names.forEach((name) => {
       const joint = joints[name];
       this.jointMap[name] = joint;
-      this.container.appendChild(this.#createJointCard(name, joint));
+
+      const card = this.#createJointCard(name, joint);
+      fragment.appendChild(card);
     });
+
+    this.container.appendChild(fragment);
   }
+
+  /* ---------------- state access ---------------- */
+
+  getJointNames() {
+    return this.jointNames;
+  }
+
+  getValuesAsMap() {
+    const map = {};
+
+    this.jointNames.forEach((name) => {
+      const joint = this.jointMap[name];
+      map[name] = joint.angle ?? 0;
+    });
+
+    return map;
+  }
+
+  getValuesAsVector() {
+    return this.jointNames.map((name) => this.jointMap[name].angle ?? 0);
+  }
+
+  /* ---------------- set values ---------------- */
 
   setJointValue(name, value, updateUi = true) {
     const joint = this.jointMap[name];
-    if (!joint) return;
-    if (typeof joint.setJointValue === 'function') joint.setJointValue(value);
-    else joint.angle = value;
+    const ui = this.uiMap[name];
 
-    if (updateUi) {
-      const safe = cssSafe(name);
-      const slider = document.getElementById(`slider-${safe}`);
-      const valueEl = document.getElementById(`value-${safe}`);
-      const inputEl = document.getElementById(`input-${safe}`);
-      const isPrismatic = joint.jointType === 'prismatic';
-      if (slider) slider.value = String(value);
-      if (valueEl) valueEl.textContent = formatJointValue(value, isPrismatic);
-      if (inputEl) inputEl.value = formatJointInput(value, isPrismatic);
+    if (!joint) return;
+
+    if (typeof joint.setJointValue === "function") {
+      joint.setJointValue(value);
+    } else {
+      joint.angle = value;
     }
+
+    if (!updateUi || !ui) return;
+
+    const isPrismatic = joint.jointType === "prismatic";
+
+    ui.slider.value = String(value);
+    ui.value.textContent = formatJointValue(value, isPrismatic);
+    ui.input.value = formatJointInput(value, isPrismatic);
   }
 
   setValuesByMap(map, updateUi = true) {
-    Object.entries(map).forEach(([name, value]) => this.setJointValue(name, value, updateUi));
+    Object.entries(map).forEach(([name, value]) =>
+      this.setJointValue(name, value, updateUi)
+    );
+  }
+
+  setValuesByVector(q, updateUi = true) {
+    this.jointNames.forEach((name, i) =>
+      this.setJointValue(name, q[i], updateUi)
+    );
   }
 
   zeroAll() {
-    Object.keys(this.jointMap).forEach((name) => this.setJointValue(name, 0, true));
+    this.jointNames.forEach((name) =>
+      this.setJointValue(name, 0, true)
+    );
   }
 
+  /* ---------------- card creation ---------------- */
+
   #createJointCard(name, joint) {
-    const jointType = joint.jointType || 'unknown';
-    const isPrismatic = jointType === 'prismatic';
+    const type = joint.jointType || "unknown";
+    const isPrismatic = type === "prismatic";
+
     const range = this.#getRange(joint);
     const current = Number.isFinite(joint.angle) ? joint.angle : 0;
+
     const safe = cssSafe(name);
 
-    const card = document.createElement('div');
-    card.className = 'joint-card';
+    const card = document.createElement("div");
+    card.className = "joint-card";
 
-    const top = document.createElement('div');
-    top.className = 'joint-top';
+    const top = document.createElement("div");
+    top.className = "joint-top";
 
-    const nameEl = document.createElement('div');
-    nameEl.className = 'joint-name';
-    nameEl.textContent = `${name} (${jointType})`;
+    const nameEl = document.createElement("div");
+    nameEl.className = "joint-name";
+    nameEl.textContent = `${name} (${type})`;
 
-    const valueEl = document.createElement('div');
-    valueEl.className = 'joint-value';
-    valueEl.id = `value-${safe}`;
+    const valueEl = document.createElement("div");
+    valueEl.className = "joint-value";
     valueEl.textContent = formatJointValue(current, isPrismatic);
 
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.id = `slider-${safe}`;
+    const slider = document.createElement("input");
+    slider.type = "range";
     slider.min = String(range.min);
     slider.max = String(range.max);
     slider.step = String(range.step);
     slider.value = String(clamp(current, range.min, range.max));
 
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.id = `input-${safe}`;
-    input.step = isPrismatic ? '0.001' : '0.1';
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = isPrismatic ? "0.001" : "0.1";
     input.value = formatJointInput(current, isPrismatic);
 
-    slider.addEventListener('input', (event) => {
-      const value = parseFloat(event.target.value);
+    /* ---------- cache UI ---------- */
+
+    this.uiMap[name] = {
+      slider,
+      input,
+      value: valueEl,
+    };
+
+    /* ---------- slider input ---------- */
+
+    slider.addEventListener("input", (e) => {
+      const value = parseFloat(e.target.value);
+
       this.setJointValue(name, value, false);
+
       valueEl.textContent = formatJointValue(value, isPrismatic);
       input.value = formatJointInput(value, isPrismatic);
+
       this.callbacks?.onJointInput?.(name, value);
     });
 
-    slider.addEventListener('change', async (event) => {
-      const value = parseFloat(event.target.value);
+    /* ---------- slider commit ---------- */
+
+    slider.addEventListener("change", async (e) => {
+      const value = parseFloat(e.target.value);
+
       await this.callbacks?.onJointCommitted?.(name, value);
     });
 
-    input.addEventListener('change', async (event) => {
-      const parsed = clamp(parseJointInput(event.target.value, isPrismatic), range.min, range.max);
+    /* ---------- numeric input ---------- */
+
+    input.addEventListener("change", async (e) => {
+      const parsed = clamp(
+        parseJointInput(e.target.value, isPrismatic),
+        range.min,
+        range.max
+      );
+
       slider.value = String(parsed);
+
       this.setJointValue(name, parsed, false);
+
       valueEl.textContent = formatJointValue(parsed, isPrismatic);
       input.value = formatJointInput(parsed, isPrismatic);
+
       this.callbacks?.onJointInput?.(name, parsed);
+
       await this.callbacks?.onJointCommitted?.(name, parsed);
     });
 
-    const controls = document.createElement('div');
-    controls.className = 'joint-controls';
+    const controls = document.createElement("div");
+    controls.className = "joint-controls";
+
     controls.appendChild(slider);
     controls.appendChild(input);
 
     top.appendChild(nameEl);
     top.appendChild(valueEl);
+
     card.appendChild(top);
     card.appendChild(controls);
+
     return card;
   }
 
+  /* ---------------- range ---------------- */
+
   #getRange(joint) {
     const type = joint.jointType;
-    if (type === 'continuous') return CONTINUOUS_RANGE;
-    const fallback = type === 'prismatic' ? PRISMATIC_FALLBACK_RANGE : ROTARY_FALLBACK_RANGE;
+
+    if (type === "continuous") return CONTINUOUS_RANGE;
+
+    const fallback =
+      type === "prismatic"
+        ? PRISMATIC_FALLBACK_RANGE
+        : ROTARY_FALLBACK_RANGE;
+
     let min = fallback.min;
     let max = fallback.max;
     const step = fallback.step;
+
     if (joint.limit) {
       if (Number.isFinite(joint.limit.lower)) min = joint.limit.lower;
       if (Number.isFinite(joint.limit.upper)) max = joint.limit.upper;
     }
+
     return { min, max, step };
   }
 }

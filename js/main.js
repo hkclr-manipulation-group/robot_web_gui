@@ -1,4 +1,10 @@
-import { DEFAULT_ROBOTS, DEFAULT_URDF_PATH, PATH_DEFAULTS, STORAGE_KEYS } from './config.js';
+import {
+  DEFAULT_ROBOTS,
+  DEFAULT_URDF_PATH,
+  PATH_DEFAULTS,
+  STORAGE_KEYS,
+} from "./config.js";
+
 import {
   connectRobot,
   disconnectRobot,
@@ -6,140 +12,84 @@ import {
   pingGateway,
   sendHomeCommand,
   sendJointCommand,
-  sendPoseCommand,
   sendStopCommand,
   sendZeroCommand,
   setActiveRobot,
   setGatewayUrl,
-} from './api.js';
-import { JointsUI } from './joints-ui.js';
-import { RobotKinematics } from './kinematics.js';
-import { planCartesianTrajectory, planJointTrajectory } from './planner.js';
-import { saveTrajectoryToFile, loadTrajectoryFromFile } from './storage.js';
-import { TaskSpaceUI } from './taskspace-ui.js';
-import { TeachSystem } from './teach.js';
-import { loadRobotFromUrdf } from './urdf-loader-wrapper.js';
-import { formatPoseText, readFileAsText, sleep } from './utils.js';
-import { RobotViewer } from './viewer.js';
+} from "./api.js";
 
-const viewer = new RobotViewer(document.getElementById('viewer'));
-const statusEl = document.getElementById('status');
-const urdfPathEl = document.getElementById('urdfPath');
-const gatewayUrlEl = document.getElementById('gatewayUrl');
-const robotSelectEl = document.getElementById('robotSelect');
-const connectionBadgeEl = document.getElementById('connectionBadge');
-const activeRobotTextEl = document.getElementById('activeRobotText');
-const jointCountEl = document.getElementById('jointCount');
-const jointContainerEl = document.getElementById('jointContainer');
-const taskSpaceContainerEl = document.getElementById('taskSpaceContainer');
-const eePoseEl = document.getElementById('eePose');
-const baseLinkEl = document.getElementById('baseLink');
-const tipLinkEl = document.getElementById('tipLink');
-const robotIdTextEl = document.getElementById('robotIdText');
-const teachCountEl = document.getElementById('teachCount');
-const pathPreviewEl = document.getElementById('pathPreview');
-const planStepsEl = document.getElementById('planSteps');
-const playDelayEl = document.getElementById('playDelay');
+import { JointsUI } from "./joints-ui.js";
+import { RobotKinematics } from "./kinematics.js";
+import { planCartesianTrajectory, planJointTrajectory } from "./planner.js";
+import { saveTrajectoryToFile, loadTrajectoryFromFile } from "./storage.js";
+import { TaskSpaceUI } from "./taskspace-ui.js";
+import { TeachSystem } from "./teach.js";
+import { loadRobotFromUrdf } from "./urdf-loader-wrapper.js";
+import { formatPoseText, readFileAsText, sleep } from "./utils.js";
+import { RobotViewer } from "./viewer.js";
+
+/* -------------------------------------------------------------------------- */
+/* DOM                                                                         */
+/* -------------------------------------------------------------------------- */
+
+const viewer = new RobotViewer(document.getElementById("viewer"));
+
+const statusEl = document.getElementById("status");
+const urdfPathEl = document.getElementById("urdfPath");
+const gatewayUrlEl = document.getElementById("gatewayUrl");
+const robotSelectEl = document.getElementById("robotSelect");
+
+const connectionBadgeEl = document.getElementById("connectionBadge");
+const activeRobotTextEl = document.getElementById("activeRobotText");
+const robotIdTextEl = document.getElementById("robotIdText");
+
+const jointCountEl = document.getElementById("jointCount");
+const jointContainerEl = document.getElementById("jointContainer");
+const taskSpaceContainerEl = document.getElementById("taskSpaceContainer");
+
+const eePoseEl = document.getElementById("eePose");
+const baseLinkEl = document.getElementById("baseLink");
+const tipLinkEl = document.getElementById("tipLink");
+
+const teachCountEl = document.getElementById("teachCount");
+const pathPreviewEl = document.getElementById("pathPreview");
+
+const planStepsEl = document.getElementById("planSteps");
+const playDelayEl = document.getElementById("playDelay");
+
+/* -------------------------------------------------------------------------- */
+/* State                                                                       */
+/* -------------------------------------------------------------------------- */
 
 let robot = null;
 let kinematics = null;
+
 let isBusy = false;
+let isSyncing = false; // 防止 UI/FK/IK 相互触发造成循环
+let ikBusy = false;    // 防止拖动时重复进入 IK
+
 let lastGoalMap = null;
 let lastGoalPose = null;
+
 const teachSystem = new TeachSystem();
 
-const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
-  onJointInput: () => refreshPoseReadout(),
-  onJointCommitted: async () => {
-    if (!kinematics) return;
-    const map = kinematics.getCurrentJointMap();
-    await sendJointCommand(Object.keys(map), Object.values(map));
-    refreshPoseReadout();
-  },
-});
+/* -------------------------------------------------------------------------- */
+/* Utilities                                                                   */
+/* -------------------------------------------------------------------------- */
 
-const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
-
-  onReadCurrent: () => {
-
-    if (!kinematics) return;
-
-    taskUI.setPose(
-      kinematics.getEndEffectorPose()
-    );
-
-  },
-
-  onMove: (pose) => {
-
-    if (!kinematics) return;
-
-    const q0 = kinematics.getCurrentJointVector();
-
-    const result = kinematics.solveIK(pose, q0);
-
-    if (!result || !result.q) return;
-
-    const map = vectorToMap(result.q);
-
-    kinematics.setJointVector(result.q);
-
-    jointsUI.setValuesByMap(map, true);
-
-    refreshPoseReadout();
-
-  },
-
-  onSetGoal: (pose) => {
-
-    lastGoalPose = pose;
-
-    setStatus(
-      "Task-space goal snapshot captured.",
-      "ok"
-    );
-
-  },
-
-  onPlanPose: () =>
-    document.getElementById("planCartesianBtn").click(),
-
-});
-
-taskUI.build();
-
-function setStatus(text, cls = '') {
+function setStatus(text, cls = "") {
   statusEl.textContent = text;
   statusEl.className = `status-text ${cls}`.trim();
 }
 
-function updateConnectionUi(kind = 'preview') {
-  const apiState = getApiState();
-  const robotInfo = DEFAULT_ROBOTS.find((item) => item.id === apiState.activeRobotId) || DEFAULT_ROBOTS[0];
-  activeRobotTextEl.textContent = `${robotInfo.name} · ${robotInfo.mode}`;
-  robotIdTextEl.textContent = robotInfo.id;
-
-  connectionBadgeEl.className = 'badge';
-  if (kind === 'ok') {
-    connectionBadgeEl.classList.add('badge-ok');
-    connectionBadgeEl.textContent = 'connected';
-  } else if (kind === 'warn') {
-    connectionBadgeEl.classList.add('badge-warn');
-    connectionBadgeEl.textContent = 'preview';
-  } else if (kind === 'danger') {
-    connectionBadgeEl.classList.add('badge-danger');
-    connectionBadgeEl.textContent = 'error';
-  } else {
-    connectionBadgeEl.classList.add('badge-muted');
-    connectionBadgeEl.textContent = 'preview';
+function withSyncGuard(fn) {
+  if (isSyncing) return;
+  isSyncing = true;
+  try {
+    fn();
+  } finally {
+    isSyncing = false;
   }
-}
-
-function vectorToMap(q) {
-  return kinematics.getJointNames().reduce((acc, name, idx) => {
-    acc[name] = q[idx];
-    return acc;
-  }, {});
 }
 
 function getPlanSteps() {
@@ -150,240 +100,613 @@ function getPlayDelay() {
   return Math.max(10, parseInt(playDelayEl.value || PATH_DEFAULTS.delayMs, 10));
 }
 
+function hasRobot() {
+  return !!kinematics;
+}
+
+function vectorToMap(q) {
+  if (!kinematics) return {};
+  return kinematics.getJointNames().reduce((acc, name, idx) => {
+    acc[name] = q[idx];
+    return acc;
+  }, {});
+}
+
+function getCurrentPose() {
+  if (!kinematics) return null;
+  return kinematics.getEndEffectorPose();
+}
+
+function updateConnectionUi(kind = "preview") {
+  const apiState = getApiState();
+  const robotInfo =
+    DEFAULT_ROBOTS.find((item) => item.id === apiState.activeRobotId) ||
+    DEFAULT_ROBOTS[0];
+
+  activeRobotTextEl.textContent = `${robotInfo.name} · ${robotInfo.mode}`;
+  robotIdTextEl.textContent = robotInfo.id;
+
+  connectionBadgeEl.className = "badge";
+
+  if (kind === "ok") {
+    connectionBadgeEl.classList.add("badge-ok");
+    connectionBadgeEl.textContent = "connected";
+  } else if (kind === "warn") {
+    connectionBadgeEl.classList.add("badge-warn");
+    connectionBadgeEl.textContent = "preview";
+  } else if (kind === "danger") {
+    connectionBadgeEl.classList.add("badge-danger");
+    connectionBadgeEl.textContent = "error";
+  } else {
+    connectionBadgeEl.classList.add("badge-muted");
+    connectionBadgeEl.textContent = "preview";
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sync: Robot -> UI                                                           */
+/* -------------------------------------------------------------------------- */
+
 function refreshPoseReadout() {
   if (!kinematics) return;
-  eePoseEl.textContent = formatPoseText(kinematics.getEndEffectorPose());
+
+  const pose = kinematics.getEndEffectorPose();
+  eePoseEl.textContent = formatPoseText(pose);
+}
+
+function syncViewerFromRobot() {
+  if (!kinematics) return;
+  const pose = kinematics.getEndEffectorPose();
+  viewer.updateTargetPose(pose);
+}
+
+function syncTaskUiFromRobot() {
+  if (!kinematics) return;
+  const pose = kinematics.getEndEffectorPose();
+  taskUI.setPose(pose);
 }
 
 function syncMeta() {
   if (!kinematics) return;
+
   baseLinkEl.textContent = kinematics.baseLinkName;
   tipLinkEl.textContent = kinematics.tipLinkName;
+
   refreshPoseReadout();
-  taskUI.setPose(kinematics.getEndEffectorPose());
+  syncTaskUiFromRobot();
+  syncViewerFromRobot();
+}
+
+function syncAllFromRobot() {
+  if (!kinematics) return;
+
+  refreshPoseReadout();
+  syncTaskUiFromRobot();
+  syncViewerFromRobot();
 }
 
 function updateTeachUi() {
   teachCountEl.textContent = `${teachSystem.count} poses`;
   pathPreviewEl.textContent = JSON.stringify(teachSystem.getPath(), null, 2);
-  localStorage.setItem(STORAGE_KEYS.lastTrajectory, JSON.stringify(teachSystem.getPath()));
+  localStorage.setItem(
+    STORAGE_KEYS.lastTrajectory,
+    JSON.stringify(teachSystem.getPath())
+  );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Sync: Apply Joint / Apply Pose                                              */
+/* -------------------------------------------------------------------------- */
+
+function applyJointVector(q, options = {}) {
+  if (!kinematics || !q) return false;
+
+  const { syncJointUi = true, syncTaskUi = true, syncViewer = true } = options;
+
+  withSyncGuard(() => {
+    kinematics.setJointVector(q);
+
+    const map = vectorToMap(q);
+
+    if (syncJointUi) {
+      jointsUI.setValuesByMap(map, true);
+    }
+
+    refreshPoseReadout();
+
+    if (syncTaskUi) {
+      syncTaskUiFromRobot();
+    }
+
+    if (syncViewer) {
+      syncViewerFromRobot();
+    }
+  });
+
+  return true;
+}
+
+function applyJointMap(map, options = {}) {
+  if (!kinematics || !map) return false;
+
+  const names = kinematics.getJointNames();
+  const q = names.map((name) => map[name] ?? 0);
+
+  return applyJointVector(q, options);
+}
+
+function applyTaskPoseByIK(pose, options = {}) {
+  if (!kinematics || !pose || ikBusy) return false;
+
+  const {
+    syncJointUi = true,
+    syncTaskUi = true,
+    syncViewer = true,
+    setAsLastGoal = false,
+  } = options;
+
+  ikBusy = true;
+
+  try {
+    const q0 = kinematics.getCurrentJointVector();
+    const result = kinematics.solveIK(pose, q0);
+
+    if (!result || !result.q) return false;
+
+    applyJointVector(result.q, {
+      syncJointUi,
+      syncTaskUi,
+      syncViewer,
+    });
+
+    if (setAsLastGoal) {
+      lastGoalPose = pose;
+    }
+
+    return true;
+  } finally {
+    ikBusy = false;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* UI Components                                                               */
+/* -------------------------------------------------------------------------- */
+
+const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
+  onJointInput: () => {
+    if (!kinematics || isSyncing) return;
+
+    withSyncGuard(() => {
+      const map = kinematics.getCurrentJointMap();
+      // 假设 jointsUI 内部已经把 slider 当前值写入了 map 所对应的机器人状态
+      // 若 jointsUI 只是 UI，不会自动写入机器人，那么这里需要改成从 UI 读值
+      refreshPoseReadout();
+      syncTaskUiFromRobot();
+      syncViewerFromRobot();
+    });
+  },
+
+  onJointCommitted: async () => {
+    if (!kinematics || isSyncing) return;
+
+    const map = kinematics.getCurrentJointMap();
+
+    refreshPoseReadout();
+    syncTaskUiFromRobot();
+    syncViewerFromRobot();
+
+    await sendJointCommand(Object.keys(map), Object.values(map));
+  },
+});
+
+const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
+  onReadCurrent: () => {
+    if (!kinematics) return;
+    taskUI.setPose(kinematics.getEndEffectorPose());
+  },
+
+  onMove: (pose) => {
+    if (!kinematics || isSyncing) return;
+
+    const ok = applyTaskPoseByIK(pose, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
+
+    if (!ok) {
+      setStatus("IK solve failed for task move.", "warn");
+    }
+  },
+
+  onSetGoal: (pose) => {
+    lastGoalPose = pose;
+    setStatus("Task-space goal snapshot captured.", "ok");
+  },
+
+  onPlanPose: () => {
+    document.getElementById("planCartesianBtn").click();
+  },
+});
+
+taskUI.build();
+
+/* -------------------------------------------------------------------------- */
+/* Viewer callbacks                                                            */
+/* -------------------------------------------------------------------------- */
+
+viewer.callbacks.onTaskMove = (pose) => {
+  if (!kinematics || isSyncing) return;
+
+  const ok = applyTaskPoseByIK(pose, {
+    syncJointUi: true,
+    syncTaskUi: true,
+    syncViewer: false, // viewer 自己已经在这个 pose 上了
+  });
+
+  if (!ok) {
+    setStatus("IK solve failed for dragged target.", "warn");
+  }
+};
+
+/* -------------------------------------------------------------------------- */
+/* Robot loading                                                               */
+/* -------------------------------------------------------------------------- */
+
+async function loadCurrentRobot(path) {
+  try {
+    setStatus("Loading URDF...", "warn");
+
+    robot = await loadRobotFromUrdf(path);
+    viewer.setRobot(robot);
+
+    kinematics = new RobotKinematics(robot);
+
+    jointsUI.build(robot);
+
+    syncMeta();
+
+    localStorage.setItem(STORAGE_KEYS.lastUrdfPath, path);
+
+    setStatus("URDF loaded.", "ok");
+  } catch (error) {
+    console.error(error);
+    setStatus(`Failed to load URDF: ${error.message || error}`, "danger-text");
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Robot selector / gateway                                                    */
+/* -------------------------------------------------------------------------- */
+
 function populateRobotSelector() {
-  robotSelectEl.innerHTML = '';
+  robotSelectEl.innerHTML = "";
+
   DEFAULT_ROBOTS.forEach((item) => {
-    const option = document.createElement('option');
+    const option = document.createElement("option");
     option.value = item.id;
-    option.textContent = `${item.name}${item.ip && item.ip !== '-' ? ` (${item.ip})` : ''}`;
+    option.textContent = `${item.name}${
+      item.ip && item.ip !== "-" ? ` (${item.ip})` : ""
+    }`;
     robotSelectEl.appendChild(option);
   });
 }
 
-async function executeTrajectory(trajectory) {
-  if (!kinematics || !trajectory?.length) return;
-  isBusy = true;
-  setStatus(`Playing ${trajectory.length} waypoints...`, 'warn');
-  for (let i = 0; i < trajectory.length; i++) {
-    if (!isBusy) break;
-    const map = trajectory[i];
-    kinematics.setJointMap(map);
-    jointsUI.setValuesByMap(map, true);
-    refreshPoseReadout();
-    await sendJointCommand(Object.keys(map), Object.values(map));
-    await sleep(getPlayDelay());
-  }
-  isBusy = false;
-  setStatus('Path playback completed.', 'ok');
-}
-
-async function loadCurrentRobot(path) {
-  try {
-    setStatus('Loading URDF...', 'warn');
-    robot = await loadRobotFromUrdf(path);
-    viewer.setRobot(robot);
-    kinematics = new RobotKinematics(robot);
-    jointsUI.build(robot);
-    syncMeta();
-    localStorage.setItem(STORAGE_KEYS.lastUrdfPath, path);
-    setStatus('URDF loaded.', 'ok');
-  } catch (error) {
-    console.error(error);
-    setStatus(`Failed to load URDF: ${error.message || error}`, 'danger-text');
-  }
-}
-
 async function saveGateway() {
-  setGatewayUrl(gatewayUrlEl.value.trim());
-  localStorage.setItem(STORAGE_KEYS.gatewayUrl, gatewayUrlEl.value.trim());
-  setStatus(gatewayUrlEl.value.trim() ? 'Gateway URL saved.' : 'Gateway cleared. Preview mode enabled.', 'ok');
-  updateConnectionUi(gatewayUrlEl.value.trim() ? 'ok' : 'warn');
+  const url = gatewayUrlEl.value.trim();
+
+  setGatewayUrl(url);
+  localStorage.setItem(STORAGE_KEYS.gatewayUrl, url);
+
+  setStatus(
+    url
+      ? "Gateway URL saved."
+      : "Gateway cleared. Preview mode enabled.",
+    "ok"
+  );
+
+  updateConnectionUi(url ? "ok" : "warn");
 }
 
 async function connectSelectedRobot() {
   try {
     const result = await connectRobot();
-    updateConnectionUi(result.mode === 'preview' ? 'warn' : 'ok');
-    setStatus(result.mode === 'preview' ? 'Preview mode active. No gateway configured.' : 'Robot connected through gateway.', result.mode === 'preview' ? 'warn' : 'ok');
+
+    updateConnectionUi(result.mode === "preview" ? "warn" : "ok");
+
+    setStatus(
+      result.mode === "preview"
+        ? "Preview mode active. No gateway configured."
+        : "Robot connected through gateway.",
+      result.mode === "preview" ? "warn" : "ok"
+    );
   } catch (error) {
-    updateConnectionUi('danger');
-    setStatus(error.message || 'Connect failed.', 'danger-text');
+    updateConnectionUi("danger");
+    setStatus(error.message || "Connect failed.", "danger-text");
   }
 }
 
-function bindButtons() {
-  document.getElementById('loadUrdfBtn').onclick = () => loadCurrentRobot(urdfPathEl.value.trim() || DEFAULT_URDF_PATH);
-  document.getElementById('fitBtn').onclick = () => viewer.fitToRobot();
-  document.getElementById('resetViewBtn').onclick = () => viewer.resetView();
-  document.getElementById('refreshPoseBtn').onclick = () => refreshPoseReadout();
-  document.getElementById('readCurrentPoseBtn').onclick = () => taskUI.setPose(kinematics?.getEndEffectorPose());
+/* -------------------------------------------------------------------------- */
+/* Trajectory                                                                  */
+/* -------------------------------------------------------------------------- */
 
-  document.getElementById('captureJointGoalBtn').onclick = () => {
-    if (!kinematics) return;
-    lastGoalMap = kinematics.getCurrentJointMap();
-    setStatus('Joint-space goal snapshot captured.', 'ok');
+async function executeTrajectory(trajectory) {
+  if (!kinematics || !trajectory?.length) return;
+
+  isBusy = true;
+  setStatus(`Playing ${trajectory.length} waypoints...`, "warn");
+
+  for (let i = 0; i < trajectory.length; i++) {
+    if (!isBusy) break;
+
+    const map = trajectory[i];
+
+    applyJointMap(map, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
+
+    await sendJointCommand(Object.keys(map), Object.values(map));
+    await sleep(getPlayDelay());
+  }
+
+  isBusy = false;
+  setStatus("Path playback completed.", "ok");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Buttons                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function bindButtons() {
+  document.getElementById("loadUrdfBtn").onclick = () => {
+    loadCurrentRobot(urdfPathEl.value.trim() || DEFAULT_URDF_PATH);
   };
 
-  document.getElementById('capturePoseGoalBtn').onclick = () => {
+  document.getElementById("fitBtn").onclick = () => {
+    viewer.fitToRobot();
+  };
+
+  document.getElementById("resetViewBtn").onclick = () => {
+    viewer.resetView();
+  };
+
+  document.getElementById("refreshPoseBtn").onclick = () => {
+    refreshPoseReadout();
+    syncViewerFromRobot();
+    syncTaskUiFromRobot();
+  };
+
+  document.getElementById("readCurrentPoseBtn").onclick = () => {
     if (!kinematics) return;
+    taskUI.setPose(kinematics.getEndEffectorPose());
+  };
+
+  document.getElementById("captureJointGoalBtn").onclick = () => {
+    if (!kinematics) return;
+
+    lastGoalMap = kinematics.getCurrentJointMap();
+    setStatus("Joint-space goal snapshot captured.", "ok");
+  };
+
+  document.getElementById("capturePoseGoalBtn").onclick = () => {
+    if (!kinematics) return;
+
     lastGoalPose = kinematics.getEndEffectorPose();
     taskUI.setPose(lastGoalPose);
-    setStatus('Task-space goal snapshot captured.', 'ok');
+
+    setStatus("Task-space goal snapshot captured.", "ok");
   };
 
-  document.getElementById('homeBtn').onclick = async () => {
+  document.getElementById("homeBtn").onclick = async () => {
     if (!kinematics) return;
-    kinematics.setJointVector(kinematics.getCurrentJointVector().map(() => 0));
-    jointsUI.zeroAll();
-    refreshPoseReadout();
+
+    const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
+
+    applyJointVector(zeroQ, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
+
     await sendHomeCommand();
-    setStatus('Moved to home.', 'ok');
+    setStatus("Moved to home.", "ok");
   };
 
-  document.getElementById('zeroBtn').onclick = async () => {
+  document.getElementById("zeroBtn").onclick = async () => {
     if (!kinematics) return;
-    kinematics.setJointVector(kinematics.getCurrentJointVector().map(() => 0));
-    jointsUI.zeroAll();
-    refreshPoseReadout();
+
+    const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
+
+    applyJointVector(zeroQ, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
+
     await sendZeroCommand();
-    setStatus('All joints zeroed.', 'ok');
+    setStatus("All joints zeroed.", "ok");
   };
 
-  document.getElementById('stopBtn').onclick = async () => {
+  document.getElementById("stopBtn").onclick = async () => {
     isBusy = false;
     await sendStopCommand();
-    setStatus('Stop requested.', 'warn');
+    setStatus("Stop requested.", "warn");
   };
 
-  document.getElementById('recordPoseBtn').onclick = () => {
+  document.getElementById("recordPoseBtn").onclick = () => {
     if (!kinematics) return;
+
     teachSystem.record(kinematics.getCurrentJointMap());
     updateTeachUi();
-    setStatus('Current pose recorded.', 'ok');
+
+    setStatus("Current pose recorded.", "ok");
   };
 
-  document.getElementById('clearPathBtn').onclick = () => {
+  document.getElementById("clearPathBtn").onclick = () => {
     teachSystem.clear();
     updateTeachUi();
-    setStatus('Path cleared.', 'ok');
+    setStatus("Path cleared.", "ok");
   };
 
-  document.getElementById('savePathBtn').onclick = () => {
+  document.getElementById("savePathBtn").onclick = () => {
     saveTrajectoryToFile(teachSystem.getPath());
-    setStatus('Trajectory file saved.', 'ok');
+    setStatus("Trajectory file saved.", "ok");
   };
 
-  document.getElementById('playPathBtn').onclick = async () => executeTrajectory(teachSystem.getPath());
+  document.getElementById("playPathBtn").onclick = async () => {
+    await executeTrajectory(teachSystem.getPath());
+  };
 
-  document.getElementById('planJointBtn').onclick = () => {
+  document.getElementById("planJointBtn").onclick = () => {
     if (!kinematics) return;
+
     if (!lastGoalMap) {
       lastGoalMap = kinematics.getCurrentJointMap();
-      setStatus('Saved current joint state as the goal snapshot. Move the arm, then click again to plan.', 'warn');
+      setStatus(
+        "Saved current joint state as the goal snapshot. Move the arm, then click again to plan.",
+        "warn"
+      );
       return;
     }
+
     const current = kinematics.getCurrentJointMap();
     const trajectory = planJointTrajectory(current, lastGoalMap, getPlanSteps());
+
     teachSystem.replaceAll(trajectory);
     updateTeachUi();
-    setStatus('Joint trajectory generated.', 'ok');
+
+    setStatus("Joint trajectory generated.", "ok");
   };
 
-  document.getElementById('planCartesianBtn').onclick = () => {
+  document.getElementById("planCartesianBtn").onclick = () => {
     if (!kinematics) return;
+
     const goalPose = lastGoalPose || taskUI.getPose();
     const startPose = kinematics.getEndEffectorPose();
-    const trajectory = planCartesianTrajectory(kinematics, startPose, goalPose, getPlanSteps());
+
+    const trajectory = planCartesianTrajectory(
+      kinematics,
+      startPose,
+      goalPose,
+      getPlanSteps()
+    );
+
     teachSystem.replaceAll(trajectory);
     updateTeachUi();
-    setStatus('Cartesian trajectory generated via IK.', 'ok');
+
+    setStatus("Cartesian trajectory generated via IK.", "ok");
   };
 
-  document.getElementById('pathFile').onchange = async (event) => {
+  document.getElementById("pathFile").onchange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
     const trajectory = await loadTrajectoryFromFile(file);
+
     teachSystem.replaceAll(trajectory);
     updateTeachUi();
-    setStatus('Trajectory loaded.', 'ok');
-    event.target.value = '';
+
+    setStatus("Trajectory loaded.", "ok");
+    event.target.value = "";
   };
 
-  document.getElementById('urdfFile').onchange = async (event) => {
+  document.getElementById("urdfFile").onchange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
     const text = await readFileAsText(file);
-    const blob = new Blob([text], { type: 'application/xml' });
+    const blob = new Blob([text], { type: "application/xml" });
     const url = URL.createObjectURL(blob);
+
     urdfPathEl.value = file.name;
+
     await loadCurrentRobot(url);
-    event.target.value = '';
+
+    event.target.value = "";
   };
 
-  document.getElementById('saveGatewayBtn').onclick = saveGateway;
-  document.getElementById('connectBtn').onclick = connectSelectedRobot;
-  document.getElementById('disconnectBtn').onclick = async () => {
+  document.getElementById("saveGatewayBtn").onclick = saveGateway;
+
+  document.getElementById("connectBtn").onclick = connectSelectedRobot;
+
+  document.getElementById("disconnectBtn").onclick = async () => {
     try {
       const result = await disconnectRobot();
-      updateConnectionUi(result.mode === 'preview' ? 'warn' : 'ok');
-      setStatus(result.mode === 'preview' ? 'Preview disconnect completed.' : 'Robot disconnected.', 'ok');
+
+      updateConnectionUi(result.mode === "preview" ? "warn" : "ok");
+
+      setStatus(
+        result.mode === "preview"
+          ? "Preview disconnect completed."
+          : "Robot disconnected.",
+        "ok"
+      );
     } catch (error) {
-      updateConnectionUi('danger');
-      setStatus(error.message || 'Disconnect failed.', 'danger-text');
+      updateConnectionUi("danger");
+      setStatus(error.message || "Disconnect failed.", "danger-text");
     }
   };
-  document.getElementById('pingBtn').onclick = async () => {
+
+  document.getElementById("pingBtn").onclick = async () => {
     try {
       const result = await pingGateway();
-      updateConnectionUi(result.mode === 'preview' ? 'warn' : 'ok');
-      setStatus(result.mode === 'preview' ? 'Preview mode ping.' : 'Gateway ping succeeded.', result.mode === 'preview' ? 'warn' : 'ok');
+
+      updateConnectionUi(result.mode === "preview" ? "warn" : "ok");
+
+      setStatus(
+        result.mode === "preview"
+          ? "Preview mode ping."
+          : "Gateway ping succeeded.",
+        result.mode === "preview" ? "warn" : "ok"
+      );
     } catch (error) {
-      updateConnectionUi('danger');
-      setStatus(error.message || 'Ping failed.', 'danger-text');
+      updateConnectionUi("danger");
+      setStatus(error.message || "Ping failed.", "danger-text");
     }
   };
 
   robotSelectEl.onchange = () => {
     setActiveRobot(robotSelectEl.value);
     localStorage.setItem(STORAGE_KEYS.robotId, robotSelectEl.value);
-    updateConnectionUi(gatewayUrlEl.value.trim() ? 'ok' : 'warn');
-    setStatus(`Switched active robot to ${robotSelectEl.selectedOptions[0]?.textContent || robotSelectEl.value}.`, 'ok');
+
+    updateConnectionUi(gatewayUrlEl.value.trim() ? "ok" : "warn");
+
+    setStatus(
+      `Switched active robot to ${
+        robotSelectEl.selectedOptions[0]?.textContent || robotSelectEl.value
+      }.`,
+      "ok"
+    );
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Boot                                                                        */
+/* -------------------------------------------------------------------------- */
 
 (function boot() {
   populateRobotSelector();
 
-  const savedGateway = localStorage.getItem(STORAGE_KEYS.gatewayUrl) || '';
-  const savedRobotId = localStorage.getItem(STORAGE_KEYS.robotId) || DEFAULT_ROBOTS[0].id;
-  const savedUrdf = localStorage.getItem(STORAGE_KEYS.lastUrdfPath) || DEFAULT_URDF_PATH;
+  const savedGateway = localStorage.getItem(STORAGE_KEYS.gatewayUrl) || "";
+  const savedRobotId =
+    localStorage.getItem(STORAGE_KEYS.robotId) || DEFAULT_ROBOTS[0].id;
+  const savedUrdf =
+    localStorage.getItem(STORAGE_KEYS.lastUrdfPath) || DEFAULT_URDF_PATH;
   const savedTraj = localStorage.getItem(STORAGE_KEYS.lastTrajectory);
 
   gatewayUrlEl.value = savedGateway;
   setGatewayUrl(savedGateway);
+
   robotSelectEl.value = savedRobotId;
   setActiveRobot(savedRobotId);
+
   urdfPathEl.value = savedUrdf;
-  updateConnectionUi(savedGateway ? 'ok' : 'warn');
+
+  updateConnectionUi(savedGateway ? "ok" : "warn");
+
   bindButtons();
 
   if (savedTraj) {
@@ -392,7 +715,10 @@ function bindButtons() {
       updateTeachUi();
     } catch {
       teachSystem.clear();
+      updateTeachUi();
     }
+  } else {
+    updateTeachUi();
   }
 
   loadCurrentRobot(savedUrdf);
