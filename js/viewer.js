@@ -156,7 +156,7 @@ export class RobotViewer {
 
     this.scene.add(grid);
 
-    //this.scene.add(new THREE.AxesHelper(0.35));
+    this.scene.add(new THREE.AxesHelper(0.35));
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 6),
