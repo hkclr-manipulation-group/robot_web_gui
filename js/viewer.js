@@ -19,7 +19,7 @@ export class RobotViewer {
     this._initCamera();
     this._initControls();
     this._initLights();
-    // this._initHelpers();
+    this._initHelpers();
     // this._initTarget();
 
     this._resize();
