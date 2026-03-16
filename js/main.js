@@ -148,10 +148,17 @@ function updateConnectionUi(kind = "preview") {
 /* -------------------------------------------------------------------------- */
 
 function refreshPoseReadout() {
+
   if (!kinematics) return;
 
   const pose = kinematics.getEndEffectorPose();
+
+  if (!pose) return;
+
   eePoseEl.textContent = formatPoseText(pose);
+
+  viewer.updateTargetPose(pose);
+
 }
 
 function syncViewerFromRobot() {
@@ -167,14 +174,19 @@ function syncTaskUiFromRobot() {
 }
 
 function syncMeta() {
+
   if (!kinematics) return;
 
   baseLinkEl.textContent = kinematics.baseLinkName;
   tipLinkEl.textContent = kinematics.tipLinkName;
 
+  const pose = kinematics.getEndEffectorPose();
+
+  if (!pose) return;
+
   refreshPoseReadout();
-  syncTaskUiFromRobot();
-  syncViewerFromRobot();
+  taskUI.setPose(pose);
+
 }
 
 function syncAllFromRobot() {

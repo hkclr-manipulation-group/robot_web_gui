@@ -267,18 +267,18 @@ export class RobotViewer {
 
   /* ---------------- External pose update ---------------- */
 
-  updateTargetPose(pose) {
+updateTargetPose(pose) {
 
-    if (!pose) return;
+  if (!pose || !pose.position || !pose.quaternion) return;
 
-    this._lock = true;
+  this._lock = true;
 
-    this.target.position.copy(pose.position);
-    this.target.quaternion.copy(pose.quaternion);
+  this.target.position.copy(pose.position);
+  this.target.quaternion.copy(pose.quaternion);
 
-    this._lock = false;
+  this._lock = false;
 
-  }
+}
 
   /* ---------------- View reset ---------------- */
 
