@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Robot Web GUI</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<title>Robot Web GUI</title>
+
+<link rel="stylesheet" href="./styles.css" />
+
+<script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+
 <script type="importmap">
 {
   "imports": {
-
     "three":
       "https://unpkg.com/three@0.160.0/build/three.module.js",
 
@@ -21,125 +26,209 @@
 
     "urdf-loader":
       "https://unpkg.com/urdf-loader@0.12.4/src/URDFLoader.js"
-
   }
 }
 </script>
+
 </head>
+
 <body>
-  <header class="topbar">
+
+<!-- Top bar -->
+
+<header class="topbar">
+
+  <div class="title-block">
+    <h1>Robot Web GUI</h1>
+    <div class="subtitle">
+      Web based robot visualization and control
+    </div>
+  </div>
+
+  <div class="top-actions">
+
+    <input id="urdfPath" value="./urdf/lrlita/robot.urdf"/>
+
+    <button id="loadUrdfBtn">
+      Load URDF
+    </button>
+
+    <label class="inline-file">
+
+      <span>Open URDF</span>
+
+      <input id="urdfFile" type="file" accept=".urdf,.xml"/>
+
+    </label>
+
+  </div>
+
+</header>
+
+
+<!-- Main layout -->
+
+<div class="app">
+
+
+<!-- LEFT : 3D Viewer -->
+
+<section class="viewer-panel">
+
+  <div class="viewer-toolbar">
+
+    <div class="status-block">
+
+      <span class="label">Status</span>
+
+      <span id="status" class="status-text">
+        Ready
+      </span>
+
+    </div>
+
+    <div class="viewer-buttons">
+
+      <button id="fitBtn">Fit</button>
+
+      <button id="resetViewBtn">Reset</button>
+
+      <button id="homeBtn">Home</button>
+
+      <button id="zeroBtn">Zero</button>
+
+      <button id="stopBtn" class="danger">Stop</button>
+
+    </div>
+
+  </div>
+
+
+  <div class="viewer-container">
+
+    <div id="viewer"></div>
+
+  </div>
+
+
+  <div class="pose-bar">
+
     <div>
-      <h1>Robot Web GUI</h1>
-      <div class="subtitle">Sticky 3D viewer, scrollable control panel, joint + task-space control, IK, teach, path playback, multi-robot gateway hooks</div>
+
+      <strong>EE Pose</strong>
+
+      <span id="eePose">
+        x=0 y=0 z=0
+      </span>
+
     </div>
-    <div class="top-actions">
-      <input id="urdfPath" value="./urdf/lrlita/robot.urdf" />
-      <button id="loadUrdfBtn">Load URDF</button>
-      <label class="inline-file">
-        <span>Open URDF</span>
-        <input id="urdfFile" type="file" accept=".urdf,.xml" />
-      </label>
+
+    <div>
+
+      <strong>Robot</strong>
+
+      <span id="activeRobotText">
+        Preview
+      </span>
+
     </div>
-  </header>
 
-  <main class="layout">
-    <section class="viewer-panel card">
-      <div class="viewer-toolbar">
-        <div class="status-block">
-          <span class="label">Status</span>
-          <span id="status" class="status-text">Ready.</span>
-        </div>
-        <div class="viewer-buttons">
-          <button id="fitBtn">Fit</button>
-          <button id="resetViewBtn">Reset View</button>
-          <button id="homeBtn">Home</button>
-          <button id="zeroBtn">Zero</button>
-          <button id="stopBtn" class="danger">Stop</button>
-        </div>
-      </div>
-      <div id="viewer"></div>
-      <div class="pose-bar">
-        <div><strong>EE Pose</strong><span id="eePose">x=0.000 y=0.000 z=0.000 r=0.0 p=0.0 y=0.0</span></div>
-        <div><strong>Robot</strong><span id="activeRobotText">Preview Only</span></div>
-      </div>
-    </section>
+  </div>
 
-    <aside class="sidebar">
-      <section class="card">
-        <div class="card-title-row">
-          <h2>Robot Manager</h2>
-          <span id="connectionBadge" class="badge badge-muted">preview</span>
-        </div>
-        <div class="stack-grid">
-          <label>Robot
-            <select id="robotSelect"></select>
-          </label>
-          <label>Gateway URL
-            <input id="gatewayUrl" type="text" placeholder="http://127.0.0.1:9000" />
-          </label>
-        </div>
-        <div class="button-grid compact-gap">
-          <button id="saveGatewayBtn">Save Gateway</button>
-          <button id="connectBtn">Connect</button>
-          <button id="disconnectBtn">Disconnect</button>
-          <button id="pingBtn">Ping</button>
-        </div>
-        <div class="meta-grid top-gap">
-          <div><span class="label">Base</span><span id="baseLink">-</span></div>
-          <div><span class="label">Tip</span><span id="tipLink">-</span></div>
-          <div><span class="label">Robot ID</span><span id="robotIdText">preview-arm</span></div>
-          <div><span class="label">Joint Count</span><span id="jointCount">0 joints</span></div>
-        </div>
-      </section>
+</section>
 
-      <section class="card">
-        <div class="card-title-row sticky-title">
-          <h2>Joint Space</h2>
-          <div class="row-actions">
-            <button id="captureJointGoalBtn">Capture Goal</button>
-            <button id="refreshPoseBtn">Refresh</button>
-          </div>
-        </div>
-        <div id="jointContainer" class="joint-list"></div>
-      </section>
 
-      <section class="card">
-        <div class="card-title-row sticky-title">
-          <h2>Task Space</h2>
-          <div class="row-actions">
-            <button id="readCurrentPoseBtn">Read Current</button>
-            <button id="capturePoseGoalBtn">Capture Goal</button>
-          </div>
-        </div>
-        <div id="taskSpaceContainer"></div>
-      </section>
 
-      <section class="card">
-        <div class="card-title-row">
-          <h2>Planning & Teach</h2>
-          <span id="teachCount">0 poses</span>
-        </div>
-        <div class="planner-grid">
-          <label>Plan Steps<input id="planSteps" type="number" min="2" max="400" value="50" /></label>
-          <label>Play Delay (ms)<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
-        </div>
-        <div class="button-grid">
-          <button id="recordPoseBtn">Record Pose</button>
-          <button id="planJointBtn">Plan Joint</button>
-          <button id="planCartesianBtn">Plan Cartesian</button>
-          <button id="playPathBtn">Play Path</button>
-          <button id="savePathBtn">Save Path</button>
-          <label class="inline-file slim">
-            <span>Load Path</span>
-            <input id="pathFile" type="file" accept=".json" />
-          </label>
-          <button id="clearPathBtn">Clear Path</button>
-        </div>
-        <pre id="pathPreview" class="path-preview">[]</pre>
-      </section>
-    </aside>
-  </main>
+<!-- RIGHT : Control Panel -->
 
-  <script type="module" src="./js/main.js"></script>
+<aside class="control-panel">
+
+
+
+<!-- Robot Manager -->
+
+<section class="card">
+
+<h2>Robot</h2>
+
+<select id="robotSelect"></select>
+
+<input id="gatewayUrl" placeholder="Gateway URL"/>
+
+<div class="button-row">
+
+<button id="connectBtn">Connect</button>
+
+<button id="disconnectBtn">Disconnect</button>
+
+<button id="pingBtn">Ping</button>
+
+</div>
+
+</section>
+
+
+
+<!-- Joint Control -->
+
+<section class="card">
+
+<h2>Joint Space</h2>
+
+<div id="jointContainer"></div>
+
+</section>
+
+
+
+<!-- Task Space -->
+
+<section class="card">
+
+<h2>Task Space</h2>
+
+<div id="taskSpaceContainer"></div>
+
+</section>
+
+
+
+<!-- Planning -->
+
+<section class="card">
+
+<h2>Planning</h2>
+
+<input id="planSteps" type="number" value="50"/>
+
+<input id="playDelay" type="number" value="40"/>
+
+<div class="button-grid">
+
+<button id="recordPoseBtn">Record</button>
+
+<button id="planJointBtn">Plan Joint</button>
+
+<button id="planCartesianBtn">Plan Cart</button>
+
+<button id="playPathBtn">Play</button>
+
+<button id="clearPathBtn">Clear</button>
+
+</div>
+
+<pre id="pathPreview"></pre>
+
+</section>
+
+
+
+</aside>
+
+</div>
+
+
+<script type="module" src="./js/main.js"></script>
+
 </body>
 </html>
