@@ -97,7 +97,15 @@ export class RobotViewer {
 
     /* drag update */
 
+    this.transform.addEventListener("objectChange", () => {
 
+      if (this._lock) return;
+
+      if (!this._dragging) return;
+
+      this._emitTargetPose();
+
+    });
 
     /* drag end */
 
