@@ -176,25 +176,27 @@ export class RobotViewer {
 
   /* ---------------- Target ---------------- */
 
-  _initTarget() {
+_initTarget() {
 
-    const geo = new THREE.SphereGeometry(
-      0.02,
-      32,
-      32
-    );
+  const geo = new THREE.SphereGeometry(0.02, 32, 32);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xffaa00,
-    });
+  this.target = new THREE.Mesh(geo, mat);
 
-    this.target = new THREE.Mesh(geo, mat);
+  // 默认位置
+  this.target.position.set(0.3, 0, 0.4);
 
-    this.scene.add(this.target);
+  // 绕 X 轴旋转 90°
+  const q = new THREE.Quaternion();
+  q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 
-    this.transform.attach(this.target);
+  this.target.quaternion.copy(q);
 
-  }
+  this.scene.add(this.target);
+
+  this.transform.attach(this.target);
+
+}
 
   /* ---------------- Robot ---------------- */
 
@@ -269,12 +271,35 @@ export class RobotViewer {
 
 updateTargetPose(pose) {
 
-  if (!pose || !pose.position || !pose.quaternion) return;
+  if (!pose) return;
 
   this._lock = true;
 
-  this.target.position.copy(pose.position);
-  this.target.quaternion.copy(pose.quaternion);
+  // SE3 pose
+  if (pose.position && pose.quaternion) {
+
+    this.target.position.copy(pose.position);
+    this.target.quaternion.copy(pose.quaternion);
+
+  }
+  // xyz + rpy pose
+  else if (pose.x !== undefined) {
+
+    this.target.position.set(
+      pose.x || 0,
+      pose.y || 0,
+      pose.z || 0
+    );
+
+    const euler = new THREE.Euler(
+      pose.rx || 0,
+      pose.ry || 0,
+      pose.rz || 0
+    );
+
+    this.target.quaternion.setFromEuler(euler);
+
+  }
 
   this._lock = false;
 

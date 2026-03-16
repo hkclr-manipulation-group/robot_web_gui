@@ -372,7 +372,7 @@ async function loadCurrentRobot(path) {
 
     robot = await loadRobotFromUrdf(path);
     viewer.setRobot(robot);
-
+    robot.updateMatrixWorld(true);
     kinematics = new RobotKinematics(robot);
 
     jointsUI.build(robot);
