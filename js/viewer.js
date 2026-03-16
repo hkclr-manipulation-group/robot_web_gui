@@ -36,7 +36,6 @@ export class RobotViewer {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b1222);
-
     this.scene.up.set(0, 0, 1);
 
   }
@@ -79,13 +78,14 @@ export class RobotViewer {
     this.orbit.target.set(0, 0, 0.35);
     this.orbit.update();
 
+/*
     this.transform = new TransformControls(
       this.camera,
       this.renderer.domElement
     );
 
     this.scene.add(this.transform);
-
+*/
     /* disable orbit while dragging */
 
     this.transform.addEventListener("dragging-changed", (e) => {
@@ -192,7 +192,7 @@ export class RobotViewer {
 
     this.scene.add(this.target);
 
-    this.transform.attach(this.target);
+    // this.transform.attach(this.target);
 
   }
 
