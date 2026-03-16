@@ -176,27 +176,25 @@ export class RobotViewer {
 
   /* ---------------- Target ---------------- */
 
-_initTarget() {
+  _initTarget() {
 
-  const geo = new THREE.SphereGeometry(0.02, 32, 32);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+    const geo = new THREE.SphereGeometry(
+      0.02,
+      32,
+      32
+    );
 
-  this.target = new THREE.Mesh(geo, mat);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffaa00,
+    });
 
-  // 默认位置
-  this.target.position.set(0.3, 0, 0.4);
+    this.target = new THREE.Mesh(geo, mat);
 
-  // 绕 X 轴旋转 90°
-  const q = new THREE.Quaternion();
-  q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+    this.scene.add(this.target);
 
-  this.target.quaternion.copy(q);
+    this.transform.attach(this.target);
 
-  this.scene.add(this.target);
-
-  this.transform.attach(this.target);
-
-}
+  }
 
   /* ---------------- Robot ---------------- */
 
