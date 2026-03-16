@@ -1,7 +1,0 @@
-{
-  "robots": [
-    { "id": "left-arm", "name": "Left Arm", "ip": "192.168.1.10", "mode": "wifi", "dof": 6 },
-    { "id": "right-arm", "name": "Right Arm", "ip": "192.168.1.11", "mode": "wifi", "dof": 6 },
-    { "id": "mobile-arm", "name": "Mobile Arm", "ip": "192.168.1.12", "mode": "wifi", "dof": 6 }
-  ]
-}
