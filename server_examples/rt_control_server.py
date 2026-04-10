@@ -138,10 +138,9 @@ def send_to_robot(robot_id, update_func=None):
     return success, message
 
 def move_joint(robot_id, payload):
-    print("payload", payload)
     global rt_panel_command
     if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
-    print("robot_id", robot_id==arm_v1)
+
     if robot_id == "arm_v1":
         rt_panel_command.joint_cmd[0] = payload.get("joint_values", rt_panel_command.joint_cmd[0])
     return True, "Success"
