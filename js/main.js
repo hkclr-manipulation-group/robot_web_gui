@@ -431,6 +431,7 @@ async function saveGateway() {
   const url = gatewayUrlEl.value.trim();
 
   setGatewayUrl(url);
+  connectStream(url);
   localStorage.setItem(STORAGE_KEYS.gatewayUrl, url);
 
   setStatus(
@@ -758,12 +759,12 @@ function bindButtons() {
   };
 }
 
-function connectStream() {
+function connectStream(url) {
   if (robotStream) {
       robotStream.close();
   }
 
-  robotStream = new EventSource("http://localhost:9000/stream");
+  robotStream = new EventSource(url + "/stream");
   
   robotStream.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -777,7 +778,7 @@ function connectStream() {
   robotStream.onerror = (err) => {
       console.error("Stream failed:", err);
       robotStream.close();
-      setTimeout(connectStream, RETRY_DELAY); //Retry
+      setTimeout(connectStream(url), RETRY_DELAY); //Retry
   };
 }
 
@@ -819,7 +820,7 @@ function connectStream() {
   //   updateTeachUi();
   // }
 
-  connectStream();
+  connectStream(savedGateway);
 
   loadCurrentRobot(savedUrdf);
 })();

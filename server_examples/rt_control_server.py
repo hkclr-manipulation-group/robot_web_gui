@@ -41,6 +41,9 @@ rt_panel_command = RtPanelCommand()
 send_to_robot_lock = threading.Lock()
 udp_dt_send = 0
 udp = None
+current_controller_ip = None
+controller_lock = threading.Lock()
+last_heartbeat = 0
 
 def initialize_panel_command(config_path, panel: RtPanelCommand):
     global udp_dt_send
@@ -192,6 +195,17 @@ def post_request(robot_id, payload, update_func):
         "message": message
     }
     
+def is_authorized(ip):
+    global current_controller_ip, last_heartbeat
+    with controller_lock:
+        now = time.time()
+
+        if current_controller_ip is None or (now - last_heartbeat > 10):
+            current_controller_ip = ip
+            last_heartbeat = now
+            return True
+        return current_controller_ip == ip
+
 class Handler(BaseHTTPRequestHandler):
     def _set_headers(self, status=200):
         self.send_response(status)
@@ -205,6 +219,16 @@ class Handler(BaseHTTPRequestHandler):
         self._set_headers(200)
 
     def do_POST(self):
+        #Prevent multiple connection
+        client_ip = self.client_address[0]
+        if not is_authorized(client_ip):
+            self.send_response(403)
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": False, "error": "Robot is busy (Controlled by another IP)"}).encode())
+            return
+        global last_heartbeat
+        last_heartbeat = time.time()
+
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length) if length else b"{}"
         data = json.loads(raw.decode("utf-8"))
