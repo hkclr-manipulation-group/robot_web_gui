@@ -112,8 +112,7 @@ def send_to_robot(robot_id, update_func=None):
     if acquired:
         if rt_planner_state is None: return False, "Open rt_control connection first."
 
-        if robot_id == "arm_v1":
-            first_update = True
+        first_update = True
         while first_update or rt_panel_command.need_setting_update or rt_planner_state.setting_update_finished:
             first_update = False
             
@@ -139,9 +138,10 @@ def send_to_robot(robot_id, update_func=None):
     return success, message
 
 def move_joint(robot_id, payload):
+    print("payload", payload)
     global rt_panel_command
     if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
-    
+    print("robot_id", robot_id==arm_v1)
     if robot_id == "arm_v1":
         rt_panel_command.joint_cmd[0] = payload.get("joint_values", rt_panel_command.joint_cmd[0])
     return True, "Success"
