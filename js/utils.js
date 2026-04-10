@@ -42,6 +42,13 @@ export function matrixToPose(matrix) {
   return poseToObject(position, euler);
 }
 
+export function quaternionToPose(position, quaternion) {
+  const quat = new THREE.Quaternion(quaternion[0], quaternion[1], quaternion[2], quaternion[3]);
+  const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+  const pos = new THREE.Vector3(position[0], position[1], position[2]);
+  return poseToObject(pos, euler);
+}
+
 export function quaternionError(targetQ, currentQ) {
 
   const qErr = targetQ.clone().multiply(currentQ.clone().invert());

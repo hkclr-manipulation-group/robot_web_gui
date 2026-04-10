@@ -103,7 +103,7 @@
         <div id="jointContainer" class="joint-list"></div>
       </section>
 
-      <section class="card">
+      <!-- <section class="card">
         <div class="card-title-row sticky-title">
           <h2>Task Space</h2>
           <div class="row-actions">
@@ -112,14 +112,18 @@
           </div>
         </div>
         <div id="taskSpaceContainer"></div>
-      </section>
+      </section> -->
 
       <section class="card">
         <div class="card-title-row">
           <h2>Planning & Teach</h2>
-          <span id="teachCount">0 poses</span>
+          <!-- <span id="teachCount">0 poses</span> -->
+          <div class="row-actions">
+            <button id="startTeachBtn">Start Teach</button>
+            <button id="stopTeachBtn">Stop Teach</button>
+          </div>
         </div>
-        <div class="planner-grid">
+        <!-- <div class="planner-grid">
           <label>Plan Steps<input id="planSteps" type="number" min="2" max="400" value="50" /></label>
           <label>Play Delay (ms)<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
         </div>
@@ -135,7 +139,7 @@
           </label>
           <button id="clearPathBtn">Clear Path</button>
         </div>
-        <pre id="pathPreview" class="path-preview">[]</pre>
+        <pre id="pathPreview" class="path-preview">[]</pre> -->
       </section>
     </aside>
   </main>

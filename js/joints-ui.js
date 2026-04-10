@@ -101,11 +101,12 @@ export class JointsUI {
 
     if (!joint) return;
 
-    if (typeof joint.setJointValue === "function") {
-      joint.setJointValue(value);
-    } else {
-      joint.angle = value;
-    }
+    joint.setVal = value;
+    // if (typeof joint.setJointValue === "function") {
+    //   joint.setJointValue(value);
+    // } else {
+    //   joint.angle = value;
+    // }
 
     if (!updateUi || !ui) return;
 
@@ -132,6 +133,19 @@ export class JointsUI {
     this.jointNames.forEach((name) =>
       this.setJointValue(name, 0, true)
     );
+  }
+
+  syncFromStreamData(q) {
+    this.jointNames.forEach((name) => {
+      const joint = this.jointMap[name];
+      const index = this.jointNames.indexOf(name);
+      const value = q[index];
+      if (typeof joint.setJointValue === "function") {
+        joint.setJointValue(value);
+      } else {
+        joint.angle = value;
+      }
+    });
   }
 
   /* ---------------- card creation ---------------- */

@@ -267,37 +267,37 @@ export class RobotViewer {
 
 updateTargetPose(pose) {
 
-  if (!pose) return;
+  // if (!pose) return;
 
-  this._lock = true;
+  // this._lock = true;
 
-  // SE3 pose
-  if (pose.position && pose.quaternion) {
+  // // SE3 pose
+  // if (pose.position && pose.quaternion) {
 
-    this.target.position.copy(pose.position);
-    this.target.quaternion.copy(pose.quaternion);
+  //   this.target.position.copy(pose.position);
+  //   this.target.quaternion.copy(pose.quaternion);
 
-  }
-  // xyz + rpy pose
-  else if (pose.x !== undefined) {
+  // }
+  // // xyz + rpy pose
+  // else if (pose.x !== undefined) {
 
-    this.target.position.set(
-      pose.x || 0,
-      pose.y || 0,
-      pose.z || 0
-    );
+  //   this.target.position.set(
+  //     pose.x || 0,
+  //     pose.y || 0,
+  //     pose.z || 0
+  //   );
 
-    const euler = new THREE.Euler(
-      pose.rx || 0,
-      pose.ry || 0,
-      pose.rz || 0
-    );
+  //   const euler = new THREE.Euler(
+  //     pose.rx || 0,
+  //     pose.ry || 0,
+  //     pose.rz || 0
+  //   );
 
-    this.target.quaternion.setFromEuler(euler);
+  //   this.target.quaternion.setFromEuler(euler);
 
-  }
+  // }
 
-  this._lock = false;
+  // this._lock = false;
 
 }
 

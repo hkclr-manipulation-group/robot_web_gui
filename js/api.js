@@ -63,6 +63,10 @@ export async function pingGateway() {
   return post('/ping', {});
 }
 
+export async function enableTeachModeApi(enable) {
+  return post('/teach', { enable });
+}
+
 export async function sendJointCommand(jointNames, jointValues) {
   return post('/move_joint', { joint_names: jointNames, joint_values: jointValues });
 }
@@ -75,10 +79,10 @@ export async function sendStopCommand() {
   return post('/stop', {});
 }
 
-export async function sendHomeCommand() {
-  return post('/home', {});
+export async function sendHomeCommand(jointNames, jointValues) {
+  return post('/home', { joint_names: jointNames, joint_values: jointValues });
 }
 
-export async function sendZeroCommand() {
-  return post('/zero', {});
+export async function sendZeroCommand(jointNames, jointValues) {
+  return post('/zero', { joint_names: jointNames, joint_values: jointValues });
 }

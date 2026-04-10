@@ -16,6 +16,7 @@ import {
   sendZeroCommand,
   setActiveRobot,
   setGatewayUrl,
+  enableTeachModeApi,
 } from "./api.js";
 
 import { JointsUI } from "./joints-ui.js";
@@ -25,7 +26,7 @@ import { saveTrajectoryToFile, loadTrajectoryFromFile } from "./storage.js";
 import { TaskSpaceUI } from "./taskspace-ui.js";
 import { TeachSystem } from "./teach.js";
 import { loadRobotFromUrdf } from "./urdf-loader-wrapper.js";
-import { formatPoseText, readFileAsText, sleep } from "./utils.js";
+import { formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 
 /* -------------------------------------------------------------------------- */
@@ -70,6 +71,9 @@ let ikBusy = false;    // 防止拖动时重复进入 IK
 
 let lastGoalMap = null;
 let lastGoalPose = null;
+
+const RETRY_DELAY = 3000;
+let robotStream = null; // EventSource for streaming robot data from gateway
 
 const teachSystem = new TeachSystem();
 
@@ -128,16 +132,22 @@ function updateConnectionUi(kind = "preview") {
 
   connectionBadgeEl.className = "badge";
 
-  if (kind === "ok") {
+  if (kind === "connect") {
     connectionBadgeEl.classList.add("badge-ok");
     connectionBadgeEl.textContent = "connected";
-  } else if (kind === "warn") {
+  } else if (kind === "disconnect") {
+    connectionBadgeEl.classList.add("badge-muted");
+    connectionBadgeEl.textContent = "disconnect";
+  } else if (kind === "ready") {
+    connectionBadgeEl.classList.add("badge-muted");
+    connectionBadgeEl.textContent = "ready";
+  }  else if (kind === "warn") {
     connectionBadgeEl.classList.add("badge-warn");
     connectionBadgeEl.textContent = "preview";
   } else if (kind === "danger") {
     connectionBadgeEl.classList.add("badge-danger");
     connectionBadgeEl.textContent = "error";
-  } else {
+  }else {
     connectionBadgeEl.classList.add("badge-muted");
     connectionBadgeEl.textContent = "preview";
   }
@@ -168,9 +178,14 @@ function syncViewerFromRobot() {
 }
 
 function syncTaskUiFromRobot() {
-  if (!kinematics) return;
-  const pose = kinematics.getEndEffectorPose();
-  taskUI.setPose(pose);
+  // if (!kinematics) return;
+  // const pose = kinematics.getEndEffectorPose();
+  // taskUI.setPose(pose);
+}
+
+function syncViewerFromStreamData(position, quaternion) {
+  const pose = quaternionToPose(position, quaternion)
+  viewer.updateTargetPose(pose);
 }
 
 function syncMeta() {
@@ -185,7 +200,7 @@ function syncMeta() {
   if (!pose) return;
 
   refreshPoseReadout();
-  taskUI.setPose(pose);
+  // taskUI.setPose(pose);
 
 }
 
@@ -216,7 +231,7 @@ function applyJointVector(q, options = {}) {
   const { syncJointUi = true, syncTaskUi = true, syncViewer = true } = options;
 
   withSyncGuard(() => {
-    kinematics.setJointVector(q);
+    // kinematics.setJointVector(q);
 
     const map = vectorToMap(q);
 
@@ -224,15 +239,15 @@ function applyJointVector(q, options = {}) {
       jointsUI.setValuesByMap(map, true);
     }
 
-    refreshPoseReadout();
+    // refreshPoseReadout();
 
-    if (syncTaskUi) {
-      syncTaskUiFromRobot();
-    }
+    // if (syncTaskUi) {
+    //   syncTaskUiFromRobot();
+    // }
 
-    if (syncViewer) {
-      syncViewerFromRobot();
-    }
+    // if (syncViewer) {
+    //   syncViewerFromRobot();
+    // }
   });
 
   return true;
@@ -307,42 +322,49 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
     refreshPoseReadout();
     syncTaskUiFromRobot();
     syncViewerFromRobot();
-
-    await sendJointCommand(Object.keys(map), Object.values(map));
-  },
-});
-
-const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
-  onReadCurrent: () => {
-    if (!kinematics) return;
-    taskUI.setPose(kinematics.getEndEffectorPose());
-  },
-
-  onMove: (pose) => {
-    if (!kinematics || isSyncing) return;
-
-    const ok = applyTaskPoseByIK(pose, {
-      syncJointUi: true,
-      syncTaskUi: true,
-      syncViewer: true,
-    });
-
-    if (!ok) {
-      setStatus("IK solve failed for task move.", "warn");
+    const result = await sendJointCommand(Object.keys(map), Object.values(map));
+    console.log("Joint command result:", result);
+    if (result.mode === "preview") {
+      setStatus("Preview mode active. No gateway configured.", "warn");
+    }else if (result.data.success) {
+      setStatus("Successfully sent joint command.", "ok");
+    }else if (!result.data.success) {
+      setStatus(`Failed to sent joint command. ${result.data.message}`, "danger-text");
     }
   },
-
-  onSetGoal: (pose) => {
-    lastGoalPose = pose;
-    setStatus("Task-space goal snapshot captured.", "ok");
-  },
-
-  onPlanPose: () => {
-    document.getElementById("planCartesianBtn").click();
-  },
 });
 
-taskUI.build();
+// const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
+//   onReadCurrent: () => {
+//     if (!kinematics) return;
+//     taskUI.setPose(kinematics.getEndEffectorPose());
+//   },
+
+//   onMove: (pose) => {
+//     if (!kinematics || isSyncing) return;
+
+//     const ok = applyTaskPoseByIK(pose, {
+//       syncJointUi: true,
+//       syncTaskUi: true,
+//       syncViewer: true,
+//     });
+
+//     if (!ok) {
+//       setStatus("IK solve failed for task move.", "warn");
+//     }
+//   },
+
+//   onSetGoal: (pose) => {
+//     lastGoalPose = pose;
+//     setStatus("Task-space goal snapshot captured.", "ok");
+//   },
+
+//   onPlanPose: () => {
+//     document.getElementById("planCartesianBtn").click();
+//   },
+// });
+
+// taskUI.build();
 
 /* -------------------------------------------------------------------------- */
 /* Viewer callbacks                                                            */
@@ -372,7 +394,7 @@ async function loadCurrentRobot(path) {
 
     robot = await loadRobotFromUrdf(path);
     viewer.setRobot(robot);
-    robot.updateMatrixWorld(true);
+    // robot.updateMatrixWorld(true);
     kinematics = new RobotKinematics(robot);
 
     jointsUI.build(robot);
@@ -418,21 +440,23 @@ async function saveGateway() {
     "ok"
   );
 
-  updateConnectionUi(url ? "ok" : "warn");
+  updateConnectionUi(url ? "ready" : "warn");
 }
 
 async function connectSelectedRobot() {
   try {
     const result = await connectRobot();
 
-    updateConnectionUi(result.mode === "preview" ? "warn" : "ok");
+    updateConnectionUi(result.mode === "preview" ? "warn" : "connect");
 
-    setStatus(
-      result.mode === "preview"
-        ? "Preview mode active. No gateway configured."
-        : "Robot connected through gateway.",
-      result.mode === "preview" ? "warn" : "ok"
-    );
+    if (result.mode === "preview") {
+      setStatus("Preview mode active. No gateway configured.", "warn");
+    }else if (result.data.success) {
+      setStatus("Robot connected to hardware.", "ok");
+    }else if (!result.data.success) {
+      setStatus(`Failed to connect to hardware. ${result.data.message}`, "danger-text");
+    }
+
   } catch (error) {
     updateConnectionUi("danger");
     setStatus(error.message || "Connect failed.", "danger-text");
@@ -491,10 +515,10 @@ function bindButtons() {
     syncTaskUiFromRobot();
   };
 
-  document.getElementById("readCurrentPoseBtn").onclick = () => {
-    if (!kinematics) return;
-    taskUI.setPose(kinematics.getEndEffectorPose());
-  };
+  // document.getElementById("readCurrentPoseBtn").onclick = () => {
+  //   if (!kinematics) return;
+  //   taskUI.setPose(kinematics.getEndEffectorPose());
+  // };
 
   document.getElementById("captureJointGoalBtn").onclick = () => {
     if (!kinematics) return;
@@ -503,14 +527,14 @@ function bindButtons() {
     setStatus("Joint-space goal snapshot captured.", "ok");
   };
 
-  document.getElementById("capturePoseGoalBtn").onclick = () => {
-    if (!kinematics) return;
+  // document.getElementById("capturePoseGoalBtn").onclick = () => {
+  //   if (!kinematics) return;
 
-    lastGoalPose = kinematics.getEndEffectorPose();
-    taskUI.setPose(lastGoalPose);
+  //   lastGoalPose = kinematics.getEndEffectorPose();
+  //   taskUI.setPose(lastGoalPose);
 
-    setStatus("Task-space goal snapshot captured.", "ok");
-  };
+  //   setStatus("Task-space goal snapshot captured.", "ok");
+  // };
 
   document.getElementById("homeBtn").onclick = async () => {
     if (!kinematics) return;
@@ -523,8 +547,14 @@ function bindButtons() {
       syncViewer: true,
     });
 
-    await sendHomeCommand();
-    setStatus("Moved to home.", "ok");
+    const result = await sendHomeCommand(Object.keys(zeroQ), Object.values(zeroQ));
+    if (result.mode === "preview") {
+      setStatus("Preview mode active. No gateway configured.", "warn");
+    }else if (result.data.success) {
+      setStatus("Successfully moved to home position.", "ok");
+    }else if (!result.data.success) {
+      setStatus(`Failed to move to home position. ${result.data.message}`, "danger-text");
+    }
   };
 
   document.getElementById("zeroBtn").onclick = async () => {
@@ -538,8 +568,14 @@ function bindButtons() {
       syncViewer: true,
     });
 
-    await sendZeroCommand();
-    setStatus("All joints zeroed.", "ok");
+    const result = await sendZeroCommand(Object.keys(zeroQ), Object.values(zeroQ));
+    if (result.mode === "preview") {
+      setStatus("Preview mode active. No gateway configured.", "warn");
+    }else if (result.data.success) {
+      setStatus("All joints set to zero.", "ok");
+    }else if (!result.data.success) {
+      setStatus(`Failed to set all joints to zero. ${result.data.message}`, "danger-text");
+    }
   };
 
   document.getElementById("stopBtn").onclick = async () => {
@@ -548,82 +584,82 @@ function bindButtons() {
     setStatus("Stop requested.", "warn");
   };
 
-  document.getElementById("recordPoseBtn").onclick = () => {
-    if (!kinematics) return;
+  // document.getElementById("recordPoseBtn").onclick = () => {
+  //   if (!kinematics) return;
 
-    teachSystem.record(kinematics.getCurrentJointMap());
-    updateTeachUi();
+  //   teachSystem.record(kinematics.getCurrentJointMap());
+  //   updateTeachUi();
 
-    setStatus("Current pose recorded.", "ok");
-  };
+  //   setStatus("Current pose recorded.", "ok");
+  // };
 
-  document.getElementById("clearPathBtn").onclick = () => {
-    teachSystem.clear();
-    updateTeachUi();
-    setStatus("Path cleared.", "ok");
-  };
+  // document.getElementById("clearPathBtn").onclick = () => {
+  //   teachSystem.clear();
+  //   updateTeachUi();
+  //   setStatus("Path cleared.", "ok");
+  // };
 
-  document.getElementById("savePathBtn").onclick = () => {
-    saveTrajectoryToFile(teachSystem.getPath());
-    setStatus("Trajectory file saved.", "ok");
-  };
+  // document.getElementById("savePathBtn").onclick = () => {
+  //   saveTrajectoryToFile(teachSystem.getPath());
+  //   setStatus("Trajectory file saved.", "ok");
+  // };
 
-  document.getElementById("playPathBtn").onclick = async () => {
-    await executeTrajectory(teachSystem.getPath());
-  };
+  // document.getElementById("playPathBtn").onclick = async () => {
+  //   await executeTrajectory(teachSystem.getPath());
+  // };
 
-  document.getElementById("planJointBtn").onclick = () => {
-    if (!kinematics) return;
+  // document.getElementById("planJointBtn").onclick = () => {
+  //   if (!kinematics) return;
 
-    if (!lastGoalMap) {
-      lastGoalMap = kinematics.getCurrentJointMap();
-      setStatus(
-        "Saved current joint state as the goal snapshot. Move the arm, then click again to plan.",
-        "warn"
-      );
-      return;
-    }
+  //   if (!lastGoalMap) {
+  //     lastGoalMap = kinematics.getCurrentJointMap();
+  //     setStatus(
+  //       "Saved current joint state as the goal snapshot. Move the arm, then click again to plan.",
+  //       "warn"
+  //     );
+  //     return;
+  //   }
 
-    const current = kinematics.getCurrentJointMap();
-    const trajectory = planJointTrajectory(current, lastGoalMap, getPlanSteps());
+  //   const current = kinematics.getCurrentJointMap();
+  //   const trajectory = planJointTrajectory(current, lastGoalMap, getPlanSteps());
 
-    teachSystem.replaceAll(trajectory);
-    updateTeachUi();
+  //   teachSystem.replaceAll(trajectory);
+  //   updateTeachUi();
 
-    setStatus("Joint trajectory generated.", "ok");
-  };
+  //   setStatus("Joint trajectory generated.", "ok");
+  // };
 
-  document.getElementById("planCartesianBtn").onclick = () => {
-    if (!kinematics) return;
+  // document.getElementById("planCartesianBtn").onclick = () => {
+  //   if (!kinematics) return;
 
-    const goalPose = lastGoalPose || taskUI.getPose();
-    const startPose = kinematics.getEndEffectorPose();
+  //   const goalPose = lastGoalPose || taskUI.getPose();
+  //   const startPose = kinematics.getEndEffectorPose();
 
-    const trajectory = planCartesianTrajectory(
-      kinematics,
-      startPose,
-      goalPose,
-      getPlanSteps()
-    );
+  //   const trajectory = planCartesianTrajectory(
+  //     kinematics,
+  //     startPose,
+  //     goalPose,
+  //     getPlanSteps()
+  //   );
 
-    teachSystem.replaceAll(trajectory);
-    updateTeachUi();
+  //   teachSystem.replaceAll(trajectory);
+  //   updateTeachUi();
 
-    setStatus("Cartesian trajectory generated via IK.", "ok");
-  };
+  //   setStatus("Cartesian trajectory generated via IK.", "ok");
+  // };
 
-  document.getElementById("pathFile").onchange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // document.getElementById("pathFile").onchange = async (event) => {
+  //   const file = event.target.files?.[0];
+  //   if (!file) return;
 
-    const trajectory = await loadTrajectoryFromFile(file);
+  //   const trajectory = await loadTrajectoryFromFile(file);
 
-    teachSystem.replaceAll(trajectory);
-    updateTeachUi();
+  //   teachSystem.replaceAll(trajectory);
+  //   updateTeachUi();
 
-    setStatus("Trajectory loaded.", "ok");
-    event.target.value = "";
-  };
+  //   setStatus("Trajectory loaded.", "ok");
+  //   event.target.value = "";
+  // };
 
   document.getElementById("urdfFile").onchange = async (event) => {
     const file = event.target.files?.[0];
@@ -648,14 +684,16 @@ function bindButtons() {
     try {
       const result = await disconnectRobot();
 
-      updateConnectionUi(result.mode === "preview" ? "warn" : "ok");
+      updateConnectionUi(result.mode === "preview" ? "warn" : "disconnect");
 
-      setStatus(
-        result.mode === "preview"
-          ? "Preview disconnect completed."
-          : "Robot disconnected.",
-        "ok"
-      );
+      if (result.mode === "preview") {
+        setStatus("Preview mode active. No gateway configured.", "warn");
+      }else if (result.data.success) {
+        setStatus("Robot disconnected to hardware.", "ok");
+      }else if (!result.data.success) {
+        setStatus(`Failed to connect to hardware. ${result.data.message}`, "danger-text");
+      }
+      
     } catch (error) {
       updateConnectionUi("danger");
       setStatus(error.message || "Disconnect failed.", "danger-text");
@@ -665,8 +703,7 @@ function bindButtons() {
   document.getElementById("pingBtn").onclick = async () => {
     try {
       const result = await pingGateway();
-
-      updateConnectionUi(result.mode === "preview" ? "warn" : "ok");
+      if (result.mode === "preview") updateConnectionUi("warn");
 
       setStatus(
         result.mode === "preview"
@@ -674,17 +711,43 @@ function bindButtons() {
           : "Gateway ping succeeded.",
         result.mode === "preview" ? "warn" : "ok"
       );
+
     } catch (error) {
       updateConnectionUi("danger");
       setStatus(error.message || "Ping failed.", "danger-text");
     }
   };
 
+  document.getElementById("startTeachBtn").onclick = () => enableTeachMode(true);
+  document.getElementById("stopTeachBtn").onclick = () => enableTeachMode(false);
+
+  async function enableTeachMode(enable) {
+    try {
+      const result = await enableTeachModeApi(enable);
+
+      if (result.mode === "preview") {
+        setStatus("Preview mode active. No gateway configured.", "warn");
+      }else if (enable && result.data.success) {
+        setStatus("Teach mode enabled.", "ok");
+      }else if (enable && !result.data.success) {
+        setStatus(`Failed to enable teach mode. ${result.data.message}`, "danger-text");
+      }else if (!enable && result.data.success) {
+        setStatus("Teach mode disabled.", "ok");
+      }else if (!enable && !result.data.success) {
+        setStatus(`Failed to disable teach mode. ${result.data.message}`, "danger-text");
+      }
+
+    } catch (error) {
+      updateConnectionUi("danger");
+      setStatus(error.message || "Connect failed.", "danger-text");
+    }
+  }
+
   robotSelectEl.onchange = () => {
     setActiveRobot(robotSelectEl.value);
     localStorage.setItem(STORAGE_KEYS.robotId, robotSelectEl.value);
 
-    updateConnectionUi(gatewayUrlEl.value.trim() ? "ok" : "warn");
+    updateConnectionUi(gatewayUrlEl.value.trim() ? "warn" : "warn");
 
     setStatus(
       `Switched active robot to ${
@@ -692,6 +755,29 @@ function bindButtons() {
       }.`,
       "ok"
     );
+  };
+}
+
+function connectStream() {
+  if (robotStream) {
+      robotStream.close();
+  }
+
+  robotStream = new EventSource("http://localhost:9000/stream");
+  
+  robotStream.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const position = data.ee_pose[0].slice(0, 3);
+      const quaternion = data.ee_pose[0].slice(3, 7);
+      const joint_position = data.joint_pos[0];
+      // syncViewerFromStreamData(position, quaternion);
+      jointsUI.syncFromStreamData(joint_position);
+  };
+
+  robotStream.onerror = (err) => {
+      console.error("Stream failed:", err);
+      robotStream.close();
+      setTimeout(connectStream, RETRY_DELAY); //Retry
   };
 }
 
@@ -717,21 +803,23 @@ function bindButtons() {
 
   urdfPathEl.value = savedUrdf;
 
-  updateConnectionUi(savedGateway ? "ok" : "warn");
+  updateConnectionUi(savedGateway ? "ready" : "warn");
 
   bindButtons();
 
-  if (savedTraj) {
-    try {
-      teachSystem.replaceAll(JSON.parse(savedTraj));
-      updateTeachUi();
-    } catch {
-      teachSystem.clear();
-      updateTeachUi();
-    }
-  } else {
-    updateTeachUi();
-  }
+  // if (savedTraj) {
+  //   try {
+  //     teachSystem.replaceAll(JSON.parse(savedTraj));
+  //     updateTeachUi();
+  //   } catch {
+  //     teachSystem.clear();
+  //     updateTeachUi();
+  //   }
+  // } else {
+  //   updateTeachUi();
+  // }
+
+  connectStream();
 
   loadCurrentRobot(savedUrdf);
 })();

@@ -100,7 +100,7 @@ export class RobotKinematics {
 
   getCurrentJointMap() {
     const out = {};
-    this.chain.forEach((item) => { out[item.name] = Number.isFinite(item.joint.angle) ? item.joint.angle : 0; });
+    this.chain.forEach((item) => { out[item.name] = Number.isFinite(item.joint.setVal) ? item.joint.setVal : 0; });
     return out;
   }
 
