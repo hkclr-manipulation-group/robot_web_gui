@@ -254,24 +254,33 @@ export class JointsUI {
     // build progress preview (left) and large slider (right)
     const progressWrap = document.createElement('div');
     progressWrap.className = 'progress-wrap';
-    const minLabel = document.createElement('div');
-    minLabel.className = 'range-label range-label-min';
-    minLabel.textContent = (isPrismatic ? sliderMin : sliderMin).toFixed(isPrismatic ? 4 : 2);
-    const maxLabel = document.createElement('div');
-    maxLabel.className = 'range-label range-label-max';
-    maxLabel.textContent = (isPrismatic ? sliderMax : sliderMax).toFixed(isPrismatic ? 4 : 2);
 
-    const progressTrack = document.createElement('div');
-    progressTrack.className = 'progress-track';
-    const progressFill = document.createElement('div');
-    progressFill.className = 'progress-fill';
-    const pctInit = (sliderValue - sliderMin) / (sliderMax - sliderMin || 1);
-    progressFill.style.width = `${Math.max(0, Math.min(1, pctInit)) * 100}%`;
-    progressTrack.appendChild(progressFill);
+      // show joint current value above the progress track
+      progressWrap.appendChild(valueEl);
 
-    progressWrap.appendChild(minLabel);
-    progressWrap.appendChild(progressTrack);
-    progressWrap.appendChild(maxLabel);
+      const progressTrack = document.createElement('div');
+      progressTrack.className = 'progress-track';
+      const progressFill = document.createElement('div');
+      progressFill.className = 'progress-fill';
+      const pctInit = (sliderValue - sliderMin) / (sliderMax - sliderMin || 1);
+      progressFill.style.width = `${Math.max(0, Math.min(1, pctInit)) * 100}%`;
+      progressTrack.appendChild(progressFill);
+
+      // labels row below the track: min left, max right
+      const minLabel = document.createElement('div');
+      minLabel.className = 'range-label range-label-min';
+      minLabel.textContent = String(Math.round(isPrismatic ? sliderMin : sliderMin));
+      const maxLabel = document.createElement('div');
+      maxLabel.className = 'range-label range-label-max';
+      maxLabel.textContent = String(Math.round(isPrismatic ? sliderMax : sliderMax));
+
+      const labelsRow = document.createElement('div');
+      labelsRow.className = 'range-labels';
+      labelsRow.appendChild(minLabel);
+      labelsRow.appendChild(maxLabel);
+
+      progressWrap.appendChild(progressTrack);
+      progressWrap.appendChild(labelsRow);
 
     const sliderWrap = document.createElement('div');
     sliderWrap.className = 'slider-wrap';
@@ -282,7 +291,6 @@ export class JointsUI {
     controls.appendChild(sliderWrap);
 
     top.appendChild(nameEl);
-    top.appendChild(valueEl);
 
     card.appendChild(top);
     card.appendChild(controls);

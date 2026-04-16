@@ -1,6 +1,7 @@
 :root {
   --bg: #ffffff;
   --panel: #ffffff;
+  --space: clamp(8px, 1vw, 16px);
   --panel-2: #f6f8fd;
   --panel-3: #f2f4fa;
   --line: #dce5f4;
@@ -15,9 +16,8 @@
   --shadow: 0 14px 40px rgba(19, 33, 62, 0.15);
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
 body {
-  margin: 0;
   color: var(--text);
   background-image: url('_exportedimage/_exportedimage/Background.svg');
   background-size: cover;
@@ -93,12 +93,20 @@ input[type="range"] {
 }
 
 .layout {
+  /* Unified surface: merge left/right into a single white block with 8px outer margin */
+  --local-gap: var(--space);
   display: grid;
-  grid-template-columns: minmax(520px, 1fr) 430px;
-  gap: 16px;
+  grid-template-columns: 70% 30%;
+  gap: var(--local-gap);
   align-items: start;
-  padding: 16px;
-  min-height: calc(100vh - 82px);
+  padding: calc(var(--local-gap) * 2);
+  /* make layout exactly fit viewport minus outer margins to avoid top-level scroll */
+  height: calc(100vh - (var(--local-gap) * 2));
+  margin: var(--local-gap);
+  background: var(--panel);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 .card {
   background: var(--panel);
@@ -108,6 +116,8 @@ input[type="range"] {
 }
 .tab-page { display: none; }
 .tab-page.active { display: flex; flex-direction: column; flex: 1 1 auto; }
+/* allow flex children to shrink properly inside constrained containers */
+.tab-page, .tab-page.active { min-height: 0; }
 
 #tabPages {
   display: flex;
@@ -131,6 +141,7 @@ input[type="range"] {
   border-radius: 999px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 22px; /* increased from default for better readability */
 }
 .tab-btn.active {
   background: var(--panel);
@@ -140,10 +151,29 @@ input[type="range"] {
 .viewer-panel {
   position: sticky;
   top: 98px;
-  height: calc(100vh - 114px);
+  height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto; /* allow internal scrolling */
+}
+
+/* Inside the unified .layout surface, remove duplicate card chrome for the two large blocks */
+.layout > .viewer-panel.card,
+.layout > aside .card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Right side panel itself: keep inner 16px spacing from the unified surface edges */
+.sidebar {
+  height: calc(100vh - 114px);
+  overflow: visible;
+  padding: var(--space);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .viewer-panel .viewer-badge {
@@ -216,7 +246,7 @@ input[type="range"] {
   border: none;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 22px; /* increased for consistency with tab-btn */
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -246,13 +276,13 @@ input[type="range"] {
   box-shadow: 0 6px 16px rgba(255, 122, 56, 0.5);
 } */
 .tab-icon {
-  width: 24px;
+  width: 36px;
   height: 24px;
   flex-shrink: 0;
 }
 
 .tab-label {
-  font-size: 13px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: 0.3px;
 }
@@ -260,32 +290,29 @@ input[type="range"] {
 /* End Effector Pose Card - Floating on viewer */
 .ee-pose-card {
   position: absolute;
-  top: 120px;
-  right: 24px;
-  background: var(--panel);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(19, 33, 62, 0.12);
-  padding: 24px 16px;
+  top: 80px;
+  right: 0px;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
   min-width: 220px;
   z-index: 50;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 10px 30px rgba(19,33,62,0.06), -6px -6px 12px rgba(255,255,255,0.6);
 }
 
 .ee-pose-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
+  font-size: 13.53px;
+  font-weight: 800; /* Poppins ExtraBold */
+  color: #505050;
   margin-bottom: 16px;
   text-align: left;
-  letter-spacing: -0.3px;
 }
 
 .ee-pose-content {
-  background: var(--panel-2);
+  background: #efefef; /* match joint-card background */
   border-radius: 12px;
   padding: 20px 24px;
-  border: 1px solid var(--line-soft);
+  box-shadow: 0 6px 18px rgba(23, 23, 24, 0.06);
 }
 
 .ee-pose-section {
@@ -295,12 +322,10 @@ input[type="range"] {
 }
 
 .ee-pose-label {
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  font-size: 13.53px;
+  color: #A0A0A0;
+  font-weight: 600; /* Poppins SemiBold */
+  margin-bottom: 0;
 }
 
 .ee-pose-coordinate {
@@ -311,19 +336,18 @@ input[type="range"] {
 }
 
 .ee-pose-axis {
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
+  font-size: 13.53px;
+  color: #A0A0A0;
+  font-weight: 600;
   text-align: left;
 }
 
 .ee-pose-value {
-  font-size: 18px;
-  color: var(--text);
-  font-weight: 700;
+  font-size: 20.68px;
+  color: #111111;
+  font-weight: 800; /* Poppins ExtraBold */
   text-align: right;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.5px;
 }
 
 #viewer { flex: 1; min-height: 520px; }
@@ -331,9 +355,9 @@ input[type="range"] {
 .status-text { font-size: 14px; }
 .viewer-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .sidebar {
-  height: calc(100vh - 114px);
-  /* avoid sidebar scrollbar; let internal cards size to fill */
-  overflow: visible;
+  height: 100%;
+  /* internal scrolling for sidebar content */
+  overflow: auto;
   padding-right: 2px;
   display: flex;
   flex-direction: column;
@@ -425,33 +449,58 @@ input[type="range"] {
 .joint-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space);
+  /* Top/bottom spacing inside the right panel per design */
+  padding-top: var(--space);
+  padding-bottom: var(--space);
   /* allow list to expand instead of scrolling inside the card */
   max-height: none;
-  overflow: visible;
+  overflow: hidden; /* prevent internal scrollbars; cards will resize to fit */
   padding-right: 4px;
 }
-.joint-card { padding: 12px; }
+
+/* Make joint-list fill available vertical space and distribute height among cards */
+.tab-page.active .joint-list {
+  flex: 1 1 auto;
+  min-height: 0; /* important for flex children to allow shrinking */
+  display: flex;
+  flex-direction: column;
+}
+
+.joint-card {
+  /* Let cards grow/shrink to share the parent's height; keep a reasonable min-height */
+  flex: 1 1 0;
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.joint-card { padding: 20px 16px; width: 100%; box-sizing: border-box; background: #efefef; border-radius: 16px; box-shadow: 0 8px 20px rgba(19,33,62,0.06); }
 .joint-top {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: center;
-  margin-bottom: 8px;
+  /* top info row and lower controls vertical gap */
+  margin-bottom: 12px; /* 12px between top info row and progress/slider area */
+  line-height: 1.5; /* top info row line-height */
 }
 .joint-name {
-  font-size: 20px;
-  line-height: 1.1;
-  font-weight: 400;
-  color: #555555;
+  font-size: 16.52px;
+  line-height: 1.0;
+  font-weight: 400; /* Poppins Regular */
+  color: #5F5F5F;
   word-break: break-word;
+  transform: translateY(16px); 
 }
 .joint-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: #111111;
+  font-size: 16.6px;
+  line-height: 1.0;
+  font-weight: 800; /* Poppins ExtraBold */
+  color: #000000;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: right;
 }
 .joint-controls {
   display: grid;
@@ -462,17 +511,31 @@ input[type="range"] {
 
 /* Progress preview (left) */
 .progress-wrap {
-  display: grid;
-  grid-template-columns: 48px 1fr 48px;
-  gap: 8px;
-  align-items: center;
+  display: block;
+  position: relative;
+  padding-top: 12px; /* reserve vertical space for the value above the track */
 }
-.range-label { font-size: 14px; color: #777777; }
+.range-label { font-size: 11.9px; color: #000000; font-weight: 300; }
+.range-label.range-label-min { text-align: left; }
+.range-label.range-label-max { text-align: right; }
+.range-labels { display:flex; justify-content:space-between; gap: 8px; margin-top: 6px; }
+
+/* place joint numeric value above and to the right of the progress track */
+/* place joint numeric value above and to the right of the progress track */
+.progress-wrap .joint-value {
+  position: absolute;
+  top: 0px;
+  right: 0;
+  transform: translateY(-50%);
+  background: transparent;
+  white-space: nowrap;
+}
 .progress-track {
   height: 8px;
   background: #cccccc;
   border-radius: 4px;
   overflow: hidden;
+  margin: 0; /* labels have 4px margin; keep track tight */
 }
 .progress-fill {
   height: 100%;
@@ -482,7 +545,7 @@ input[type="range"] {
 }
 
 /* Slider area (right) */
-.slider-wrap { width: 100%; display:flex; align-items:center; }
+.slider-wrap { width: 100%; display:flex; align-items:center; justify-content:center; }
 .slider-large {
   -webkit-appearance: none;
   appearance: none;
@@ -494,12 +557,21 @@ input[type="range"] {
 .slider-large:focus { outline: none; }
 .slider-large::-webkit-slider-runnable-track {
   height: 32px;
-  background: #ff5c26;
+  background: transparent; 
+  background-image: url('./_exportedimage/_exportedimage/Group 185.svg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
   border-radius: 16px;
 }
+
 .slider-large::-moz-range-track {
   height: 32px;
-  background: #ff5c26;
+  background: transparent;
+  background-image: url('./_exportedimage/_exportedimage/Group 185.svg');
+  background-size: 100% 100%; 
+  background-repeat: no-repeat;
+  background-position: center;
   border-radius: 16px;
 }
 .slider-large::-webkit-slider-thumb {
