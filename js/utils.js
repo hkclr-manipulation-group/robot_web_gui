@@ -22,7 +22,8 @@ export function parseJointInput(value, isPrismatic = false) {
 }
 
 export function formatPoseText(pose) {
-  return `x=${pose.x.toFixed(3)} y=${pose.y.toFixed(3)} z=${pose.z.toFixed(3)} r=${THREE.MathUtils.radToDeg(pose.rx).toFixed(1)} p=${THREE.MathUtils.radToDeg(pose.ry).toFixed(1)} y=${THREE.MathUtils.radToDeg(pose.rz).toFixed(1)}`;
+  return `x=${pose.x.toFixed(3)} y=${pose.y.toFixed(3)} z=${pose.z.toFixed(3)} `;
+  // return `x=${pose.x.toFixed(3)} y=${pose.y.toFixed(3)} z=${pose.z.toFixed(3)} r=${THREE.MathUtils.radToDeg(pose.rx).toFixed(1)} p=${THREE.MathUtils.radToDeg(pose.ry).toFixed(1)} y=${THREE.MathUtils.radToDeg(pose.rz).toFixed(1)}`;
 }
 
 export function sleep(ms) {

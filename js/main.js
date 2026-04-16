@@ -127,7 +127,7 @@ function updateConnectionUi(kind = "preview") {
     DEFAULT_ROBOTS.find((item) => item.id === apiState.activeRobotId) ||
     DEFAULT_ROBOTS[0];
 
-  activeRobotTextEl.textContent = `${robotInfo.name} · ${robotInfo.mode}`;
+  // activeRobotTextEl.textContent = `${robotInfo.name} · ${robotInfo.mode}`;
   robotIdTextEl.textContent = robotInfo.id;
 
   connectionBadgeEl.className = "badge";
@@ -165,7 +165,7 @@ function refreshPoseReadout() {
 
   if (!pose) return;
 
-  eePoseEl.textContent = formatPoseText(pose);
+  // eePoseEl.textContent = formatPoseText(pose);
 
   viewer.updateTargetPose(pose);
 
@@ -502,19 +502,19 @@ function bindButtons() {
     loadCurrentRobot(urdfPathEl.value.trim() || DEFAULT_URDF_PATH);
   };
 
-  document.getElementById("fitBtn").onclick = () => {
-    viewer.fitToRobot();
-  };
+  // document.getElementById("fitBtn").onclick = () => {
+  //   viewer.fitToRobot();
+  // };
 
-  document.getElementById("resetViewBtn").onclick = () => {
-    viewer.resetView();
-  };
+  // document.getElementById("resetViewBtn").onclick = () => {
+  //   viewer.resetView();
+  // };
 
-  document.getElementById("refreshPoseBtn").onclick = () => {
-    refreshPoseReadout();
-    syncViewerFromRobot();
-    syncTaskUiFromRobot();
-  };
+  // document.getElementById("refreshPoseBtn").onclick = () => {
+  //   refreshPoseReadout();
+  //   syncViewerFromRobot();
+  //   syncTaskUiFromRobot();
+  // };
 
   // document.getElementById("readCurrentPoseBtn").onclick = () => {
   //   if (!kinematics) return;
@@ -539,7 +539,7 @@ function bindButtons() {
 
   document.getElementById("homeBtn").onclick = async () => {
     if (!kinematics) return;
-
+    viewer.fitToRobot();
     const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
 
     applyJointVector(zeroQ, {
@@ -558,32 +558,32 @@ function bindButtons() {
     }
   };
 
-  document.getElementById("zeroBtn").onclick = async () => {
-    if (!kinematics) return;
+  // document.getElementById("zeroBtn").onclick = async () => {
+  //   if (!kinematics) return;
 
-    const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
+  //   const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
 
-    applyJointVector(zeroQ, {
-      syncJointUi: true,
-      syncTaskUi: true,
-      syncViewer: true,
-    });
+  //   applyJointVector(zeroQ, {
+  //     syncJointUi: true,
+  //     syncTaskUi: true,
+  //     syncViewer: true,
+  //   });
 
-    const result = await sendZeroCommand(Object.keys(zeroQ), Object.values(zeroQ));
-    if (result.mode === "preview") {
-      setStatus("Preview mode active. No gateway configured.", "warn");
-    }else if (result.data.success) {
-      setStatus("All joints set to zero.", "ok");
-    }else if (!result.data.success) {
-      setStatus(`Failed to set all joints to zero. ${result.data.message}`, "danger-text");
-    }
-  };
+  //   const result = await sendZeroCommand(Object.keys(zeroQ), Object.values(zeroQ));
+  //   if (result.mode === "preview") {
+  //     setStatus("Preview mode active. No gateway configured.", "warn");
+  //   }else if (result.data.success) {
+  //     setStatus("All joints set to zero.", "ok");
+  //   }else if (!result.data.success) {
+  //     setStatus(`Failed to set all joints to zero. ${result.data.message}`, "danger-text");
+  //   }
+  // };
 
-  document.getElementById("stopBtn").onclick = async () => {
-    isBusy = false;
-    await sendStopCommand();
-    setStatus("Stop requested.", "warn");
-  };
+  // document.getElementById("stopBtn").onclick = async () => {
+  //   isBusy = false;
+  //   await sendStopCommand();
+  //   setStatus("Stop requested.", "warn");
+  // };
 
   // document.getElementById("recordPoseBtn").onclick = () => {
   //   if (!kinematics) return;
@@ -744,6 +744,52 @@ function bindButtons() {
     }
   }
 
+   // Robot Manager floating panel toggle
+  const mgrBtn = document.getElementById("openRobotManagerBtn");
+  const mgrPanel = document.getElementById("robotManagerFloating");
+  if (mgrBtn && mgrPanel) {
+    mgrBtn.onclick = (e) => {
+      e.stopPropagation();
+      const isActive = mgrPanel.classList.toggle("active");
+      mgrPanel.setAttribute("aria-hidden", isActive ? "false" : "true");
+      
+      if (isActive) {
+        const btnRect = mgrBtn.getBoundingClientRect();
+        const panelWidth = 380;
+        const panelHeight = mgrPanel.scrollHeight || 400; 
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let leftPosition = btnRect.left;
+        
+        if (leftPosition + panelWidth > viewportWidth) {
+          leftPosition = viewportWidth - panelWidth - 10; 
+        }
+        
+        if (leftPosition < 10) {
+          leftPosition = 10;
+        }
+        
+        let topPosition = btnRect.bottom + 8;
+        
+        if (topPosition + panelHeight > viewportHeight) {
+          topPosition = btnRect.top - panelHeight - 8;
+        }
+        
+        mgrPanel.style.left = leftPosition + "px";
+        mgrPanel.style.top = topPosition + "px";
+        mgrPanel.style.right = "auto"; 
+      }
+    };
+    
+    document.addEventListener("click", (ev) => {
+      if (!mgrPanel.classList.contains("active")) return;
+      if (mgrPanel.contains(ev.target) || mgrBtn.contains(ev.target)) return;
+      mgrPanel.classList.remove("active");
+      mgrPanel.setAttribute("aria-hidden", "true");
+    });
+  }
+
   robotSelectEl.onchange = () => {
     setActiveRobot(robotSelectEl.value);
     localStorage.setItem(STORAGE_KEYS.robotId, robotSelectEl.value);
@@ -759,6 +805,46 @@ function bindButtons() {
   };
 }
 
+function bindCardTabs() {
+  const init = () => {
+    const tabs = document.querySelectorAll(".tab-btn");
+    const pages = document.querySelectorAll(".tab-page");
+
+    console.log("[robot_web_gui] bindCardTabs — Tabs found:", tabs.length);
+    console.log("[robot_web_gui] bindCardTabs — Pages found:", pages.length);
+
+    if (!tabs.length) return;
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", (e) => {
+        e.preventDefault();
+        const pageId = tab.dataset.page;
+        console.log("[robot_web_gui] Clicked tab:", pageId);
+
+        // Remove active from all tabs and pages
+        tabs.forEach((t) => t.classList.remove("active"));
+        pages.forEach((p) => p.classList.remove("active"));
+
+        // Add active to clicked tab
+        tab.classList.add("active");
+
+        // Add active to corresponding page
+        const activePage = document.querySelector(`.tab-page[data-page="${pageId}"]`);
+        console.log("[robot_web_gui] Active page:", activePage);
+        if (activePage) {
+          activePage.classList.add("active");
+        }
+      });
+    });
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+}
+
 function connectStream(url) {
   if (robotStream) {
       robotStream.close();
@@ -771,6 +857,10 @@ function connectStream(url) {
       const position = data.ee_pose[0].slice(0, 3);
       const quaternion = data.ee_pose[0].slice(3, 7);
       const joint_position = data.joint_pos[0];
+      
+      // Update EE Pose Card
+      updateEePoseCard(position);
+      
       // syncViewerFromStreamData(position, quaternion);
       jointsUI.syncFromStreamData(joint_position);
   };
@@ -780,6 +870,19 @@ function connectStream(url) {
       robotStream.close();
       setTimeout(connectStream(url), RETRY_DELAY); //Retry
   };
+}
+
+// Update End Effector Pose Card display
+function updateEePoseCard(position) {
+  if (!position || position.length < 3) return;
+  
+  const eePoseXEl = document.getElementById("eePoseX");
+  const eePoseYEl = document.getElementById("eePoseY");
+  const eePoseZEl = document.getElementById("eePoseZ");
+  
+  if (eePoseXEl) eePoseXEl.textContent = position[0].toFixed(4);
+  if (eePoseYEl) eePoseYEl.textContent = position[1].toFixed(4);
+  if (eePoseZEl) eePoseZEl.textContent = position[2].toFixed(4);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -807,6 +910,7 @@ function connectStream(url) {
   updateConnectionUi(savedGateway ? "ready" : "warn");
 
   bindButtons();
+  bindCardTabs();
 
   // if (savedTraj) {
   //   try {

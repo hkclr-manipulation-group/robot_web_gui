@@ -35,7 +35,7 @@ export class RobotViewer {
   _initScene() {
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b1222);
+    this.scene.background = new THREE.Color(0xffffff);
     this.scene.up.set(0, 0, 1);
 
   }
@@ -147,8 +147,8 @@ export class RobotViewer {
     const grid = new THREE.GridHelper(
       4,
       20,
-      0x3f6eb8,
-      0x263b64
+      0xff8800,  // 主线颜色 - 亮橙色
+      0xcc6600   // 次线颜色 - 深橙色
     );
 
     grid.rotateX(Math.PI / 2);
@@ -159,8 +159,8 @@ export class RobotViewer {
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 6),
-      new THREE.MeshPhongMaterial({
-        color: 0x101a30,
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
         side: THREE.DoubleSide,
       })
     );
@@ -183,7 +183,7 @@ export class RobotViewer {
     );
 
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xffaa00,
+      color: 0xffffff,
     });
 
     this.target = new THREE.Mesh(geo, mat);

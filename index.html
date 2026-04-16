@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Robot Web GUI</title>
   <link rel="stylesheet" href="./styles.css" />
   <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
-<script type="importmap">
+  <script type="importmap">
 {
   "imports": {
 
@@ -26,45 +27,146 @@
 }
 </script>
 </head>
+
 <body>
-  <header class="topbar">
+  <!-- <header class="topbar">
     <div>
       <h1>Robot Web GUI</h1>
-      <div class="subtitle">Sticky 3D viewer, scrollable control panel, joint + task-space control, IK, teach, path playback, multi-robot gateway hooks</div>
+      <div class="subtitle">Sticky 3D viewer, scrollable control panel, joint + task-space control, IK, teach, path
+        playback, multi-robot gateway hooks</div>
     </div>
-    <div class="top-actions">
-      <input id="urdfPath" value="./urdf/lrlita/robot.urdf" />
-      <button id="loadUrdfBtn">Load URDF</button>
-      <label class="inline-file">
-        <span>Open URDF</span>
-        <input id="urdfFile" type="file" accept=".urdf,.xml" />
-      </label>
-    </div>
-  </header>
+  </header> -->
 
   <main class="layout">
     <section class="viewer-panel card">
       <div class="viewer-toolbar">
-        <div class="status-block">
-          <span class="label">Status</span>
-          <span id="status" class="status-text">Ready.</span>
-        </div>
         <div class="viewer-buttons">
-          <button id="fitBtn">Fit</button>
-          <button id="resetViewBtn">Reset View</button>
-          <button id="homeBtn">Home</button>
-          <button id="zeroBtn">Zero</button>
-          <button id="stopBtn" class="danger">Stop</button>
+          <!-- <button id="fitBtn">Fit</button> -->
+          <!-- <button id="resetViewBtn">Reset View</button> -->
+          <button id="openRobotManagerBtn" title="Robot Manager" class="icon-only">
+            <img src="./_exportedimage/_exportedimage/Group 118.svg" alt="Robot Manager" style="width: 36px; height: 36px;" />
+          </button>
+          <button id="homeBtn" title="Home" class="icon-only">
+            <img src="./_exportedimage/_exportedimage/Group 116.svg" alt="Home" style="width: 36px; height: 36px;" />
+          </button>
+          <!-- <button id="zeroBtn">Zero</button> -->
+          <!-- <button id="stopBtn" class="danger">Stop</button> -->
+        </div>
+        <div class="status-block">
+          <!-- <span class="label">Status</span> -->
+          <span id="status" class="status-text">Ready.</span>
         </div>
       </div>
       <div id="viewer"></div>
-      <div class="pose-bar">
+      <img src="./_exportedimage/_exportedimage/image 225.svg" alt="badge" class="viewer-badge"/>
+      
+      <!-- End Effector Pose Card -->
+      <div class="ee-pose-card">
+        <div class="ee-pose-title">End Effector Pose</div>
+        <div class="ee-pose-content">
+          <div class="ee-pose-section">
+            <div class="ee-pose-label">Trans</div>
+            <div class="ee-pose-coordinate">
+              <span class="ee-pose-axis">x</span>
+              <span id="eePoseX" class="ee-pose-value">0.1594</span>
+            </div>
+            <div class="ee-pose-coordinate">
+              <span class="ee-pose-axis">y</span>
+              <span id="eePoseY" class="ee-pose-value">0.958</span>
+            </div>
+            <div class="ee-pose-coordinate">
+              <span class="ee-pose-axis">z</span>
+              <span id="eePoseZ" class="ee-pose-value">1.3445</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Tab buttons positioned at bottom center of viewer -->
+      <div class="viewer-tabs">
+        <button type="button" class="tab-btn active" data-page="joint">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+          </svg>
+          <span class="tab-label">Joint</span>
+        </button>
+        <button type="button" class="tab-btn" data-page="task" style="display: none;">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z" fill="currentColor"/>
+          </svg>
+          <span class="tab-label">Task</span>
+        </button>
+        <button type="button" class="tab-btn" data-page="planning">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z" fill="currentColor"/>
+          </svg>
+          <span class="tab-label">Teach</span>
+        </button>
+      </div>
+      
+      <!-- <div class="pose-bar">
         <div><strong>EE Pose</strong><span id="eePose">x=0.000 y=0.000 z=0.000 r=0.0 p=0.0 y=0.0</span></div>
         <div><strong>Robot</strong><span id="activeRobotText">Preview Only</span></div>
-      </div>
+      </div> -->
     </section>
 
     <aside class="sidebar">
+      <div id="tabPages">
+        <section class="card tab-page active" data-page="joint">
+          <div class="card-title-row sticky-title">
+            <!-- <h2>Joint Space</h2> -->
+            <div class="row-actions">
+              <button id="captureJointGoalBtn" style="display: none;">Capture Goal</button>
+              <button id="refreshPoseBtn" style="display: none;">Refresh</button>
+            </div>
+          </div>
+          <div id="jointContainer" class="joint-list"></div>
+        </section>
+
+        <!-- <section class="card tab-page" data-page="task"> -->
+        <section class="card tab-page" data-page="task" style="display: none;">
+          <div class="card-title-row sticky-title">
+            <!-- <h2>Task Space</h2> -->
+            <div class="row-actions">
+              <button id="readCurrentPoseBtn">Read Current</button>
+              <button id="capturePoseGoalBtn">Capture Goal</button>
+            </div>
+          </div>
+          <div id="taskSpaceContainer"></div>
+        </section>
+
+        <section class="card tab-page" data-page="planning">
+          <div class="card-title-row">
+            <!-- <h2>Planning & Teach</h2> -->
+            <!-- <span id="teachCount">0 poses</span> -->
+          </div>
+          <!-- <div class="planner-grid">
+          <label>Plan Steps<input id="planSteps" type="number" min="2" max="400" value="50" /></label>
+          <label>Play Delay (ms)<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
+        </div> -->
+          <!-- <div class="button-grid">
+          <button id="recordPoseBtn">Record Pose</button>
+          <button id="planJointBtn">Plan Joint</button>
+          <button id="planCartesianBtn">Plan Cartesian</button>
+          <button id="playPathBtn">Play Path</button>
+          <button id="savePathBtn">Save Path</button>
+          <label class="inline-file slim">
+            <span>Load Path</span>
+            <input id="pathFile" type="file" accept=".json" />
+          </label>
+          <button id="clearPathBtn">Clear Path</button>
+        </div> -->
+          <!-- <pre id="pathPreview" class="path-preview">[]</pre> -->
+          <div class="button-grid">
+            <button id="startTeachBtn">Start Teach</button>
+            <button id="stopTeachBtn">Stop Teach</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- Floating Robot Manager (hidden by default) -->
+    <div id="robotManagerFloating" class="floating-panel" aria-hidden="true">
       <section class="card">
         <div class="card-title-row">
           <h2>Robot Manager</h2>
@@ -77,6 +179,16 @@
           <label>Gateway URL
             <input id="gatewayUrl" type="text" placeholder="http://127.0.0.1:9000" />
           </label>
+          <label>URDF Path
+            <input id="urdfPath" value="./urdf/lrlita/robot.urdf" />
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="loadUrdfBtn">Load URDF</button>
+            <label class="inline-file" style="margin:0;">
+              <span>Open URDF</span>
+              <input id="urdfFile" type="file" accept=".urdf,.xml" />
+            </label>
+          </div>
         </div>
         <div class="button-grid compact-gap">
           <button id="saveGatewayBtn">Save Gateway</button>
@@ -91,59 +203,12 @@
           <div><span class="label">Joint Count</span><span id="jointCount">0 joints</span></div>
         </div>
       </section>
-
-      <section class="card">
-        <div class="card-title-row sticky-title">
-          <h2>Joint Space</h2>
-          <div class="row-actions">
-            <button id="captureJointGoalBtn">Capture Goal</button>
-            <button id="refreshPoseBtn">Refresh</button>
-          </div>
-        </div>
-        <div id="jointContainer" class="joint-list"></div>
-      </section>
-
-      <!-- <section class="card">
-        <div class="card-title-row sticky-title">
-          <h2>Task Space</h2>
-          <div class="row-actions">
-            <button id="readCurrentPoseBtn">Read Current</button>
-            <button id="capturePoseGoalBtn">Capture Goal</button>
-          </div>
-        </div>
-        <div id="taskSpaceContainer"></div>
-      </section> -->
-
-      <section class="card">
-        <div class="card-title-row">
-          <h2>Planning & Teach</h2>
-          <!-- <span id="teachCount">0 poses</span> -->
-          <div class="row-actions">
-            <button id="startTeachBtn">Start Teach</button>
-            <button id="stopTeachBtn">Stop Teach</button>
-          </div>
-        </div>
-        <!-- <div class="planner-grid">
-          <label>Plan Steps<input id="planSteps" type="number" min="2" max="400" value="50" /></label>
-          <label>Play Delay (ms)<input id="playDelay" type="number" min="10" max="5000" value="40" /></label>
-        </div>
-        <div class="button-grid">
-          <button id="recordPoseBtn">Record Pose</button>
-          <button id="planJointBtn">Plan Joint</button>
-          <button id="planCartesianBtn">Plan Cartesian</button>
-          <button id="playPathBtn">Play Path</button>
-          <button id="savePathBtn">Save Path</button>
-          <label class="inline-file slim">
-            <span>Load Path</span>
-            <input id="pathFile" type="file" accept=".json" />
-          </label>
-          <button id="clearPathBtn">Clear Path</button>
-        </div>
-        <pre id="pathPreview" class="path-preview">[]</pre> -->
-      </section>
-    </aside>
+    </div>
   </main>
 
+  <script>
+    console.log("[robot_web_gui] inline script loaded — DOM and static scripts executed");
+  </script>
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>

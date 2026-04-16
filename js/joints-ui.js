@@ -112,9 +112,20 @@ export class JointsUI {
 
     const isPrismatic = joint.jointType === "prismatic";
 
-    ui.slider.value = String(value);
+    // slider UI uses degrees while internal value is radians
+    const toDeg = (r) => (r * 180) / Math.PI;
+    ui.slider.value = String(toDeg(value));
     ui.value.textContent = formatJointValue(value, isPrismatic);
-    ui.input.value = formatJointInput(value, isPrismatic);
+    // update progress fill if present (map by degrees)
+    const card = ui.slider.closest('.joint-card');
+    if (card) {
+      const range = this.#getRange(joint);
+      const degMin = toDeg(range.min);
+      const degMax = toDeg(range.max);
+      const pct = (toDeg(value) - degMin) / (degMax - degMin || 1);
+      const fill = card.querySelector('.progress-fill');
+      if (fill) fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+    }
   }
 
   setValuesByMap(map, updateUi = true) {
@@ -175,71 +186,100 @@ export class JointsUI {
 
     const slider = document.createElement("input");
     slider.type = "range";
-    slider.min = String(range.min);
-    slider.max = String(range.max);
-    slider.step = String(range.step);
-    slider.value = String(clamp(current, range.min, range.max));
-
-    const input = document.createElement("input");
-    input.type = "number";
-    input.step = isPrismatic ? "0.001" : "0.1";
-    input.value = formatJointInput(current, isPrismatic);
+    // For prismatic joints, keep meters; for rotary use degrees in UI.
+    const deg = (v) => (v * 180) / Math.PI;
+    const rad = (d) => (d * Math.PI) / 180;
+    let sliderMin, sliderMax, sliderStep, sliderValue;
+    if (isPrismatic) {
+      sliderMin = range.min;
+      sliderMax = range.max;
+      sliderStep = range.step || 0.001;
+      sliderValue = clamp(current, range.min, range.max);
+    } else {
+      sliderMin = deg(range.min);
+      sliderMax = deg(range.max);
+      sliderStep = deg(range.step) || 0.1;
+      sliderValue = deg(clamp(current, range.min, range.max));
+    }
+    slider.min = String(sliderMin);
+    slider.max = String(sliderMax);
+    // use 'any' to avoid browser HTML5 validation tooltips when value/step
+    // floating-point rounding causes mismatches. keep original step on data attribute.
+    slider.setAttribute('data-step', String(sliderStep));
+    slider.step = 'any';
+    slider.value = String(Number.isFinite(sliderValue) ? sliderValue : 0);
 
     /* ---------- cache UI ---------- */
 
     this.uiMap[name] = {
       slider,
-      input,
       value: valueEl,
     };
 
     /* ---------- slider input ---------- */
 
     slider.addEventListener("input", (e) => {
-      const value = parseFloat(e.target.value);
+      const raw = parseFloat(e.target.value);
+      const valueRad = isPrismatic ? raw : rad(raw);
 
-      this.setJointValue(name, value, false);
+      this.setJointValue(name, valueRad, false);
 
-      valueEl.textContent = formatJointValue(value, isPrismatic);
-      input.value = formatJointInput(value, isPrismatic);
+      // update displayed value and progress fill
+      valueEl.textContent = formatJointValue(valueRad, isPrismatic);
+      const fill = card.querySelector('.progress-fill');
+      if (fill) {
+        const a = isPrismatic ? sliderMin : sliderMin; // already in UI units
+        const b = isPrismatic ? sliderMax : sliderMax;
+        const pct = (raw - a) / (b - a || 1);
+        fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+      }
 
-      this.callbacks?.onJointInput?.(name, value);
+      // callbacks receive radians (internal units)
+      this.callbacks?.onJointInput?.(name, valueRad);
     });
 
     /* ---------- slider commit ---------- */
 
     slider.addEventListener("change", async (e) => {
-      const value = parseFloat(e.target.value);
-
-      await this.callbacks?.onJointCommitted?.(name, value);
+      const raw = parseFloat(e.target.value);
+      const valueRad = isPrismatic ? raw : rad(raw);
+      await this.callbacks?.onJointCommitted?.(name, valueRad);
     });
 
-    /* ---------- numeric input ---------- */
-
-    input.addEventListener("change", async (e) => {
-      const parsed = clamp(
-        parseJointInput(e.target.value, isPrismatic),
-        range.min,
-        range.max
-      );
-
-      slider.value = String(parsed);
-
-      this.setJointValue(name, parsed, false);
-
-      valueEl.textContent = formatJointValue(parsed, isPrismatic);
-      input.value = formatJointInput(parsed, isPrismatic);
-
-      this.callbacks?.onJointInput?.(name, parsed);
-
-      await this.callbacks?.onJointCommitted?.(name, parsed);
-    });
+    // numeric input removed — changes are handled via slider
 
     const controls = document.createElement("div");
     controls.className = "joint-controls";
 
-    controls.appendChild(slider);
-    controls.appendChild(input);
+    // build progress preview (left) and large slider (right)
+    const progressWrap = document.createElement('div');
+    progressWrap.className = 'progress-wrap';
+    const minLabel = document.createElement('div');
+    minLabel.className = 'range-label range-label-min';
+    minLabel.textContent = (isPrismatic ? sliderMin : sliderMin).toFixed(isPrismatic ? 4 : 2);
+    const maxLabel = document.createElement('div');
+    maxLabel.className = 'range-label range-label-max';
+    maxLabel.textContent = (isPrismatic ? sliderMax : sliderMax).toFixed(isPrismatic ? 4 : 2);
+
+    const progressTrack = document.createElement('div');
+    progressTrack.className = 'progress-track';
+    const progressFill = document.createElement('div');
+    progressFill.className = 'progress-fill';
+    const pctInit = (sliderValue - sliderMin) / (sliderMax - sliderMin || 1);
+    progressFill.style.width = `${Math.max(0, Math.min(1, pctInit)) * 100}%`;
+    progressTrack.appendChild(progressFill);
+
+    progressWrap.appendChild(minLabel);
+    progressWrap.appendChild(progressTrack);
+    progressWrap.appendChild(maxLabel);
+
+    const sliderWrap = document.createElement('div');
+    sliderWrap.className = 'slider-wrap';
+    slider.className = 'slider-large';
+    sliderWrap.appendChild(slider);
+
+    controls.appendChild(progressWrap);
+    controls.appendChild(sliderWrap);
 
     top.appendChild(nameEl);
     top.appendChild(valueEl);
