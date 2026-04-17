@@ -291,7 +291,7 @@ input[type="range"] {
 .ee-pose-card {
   position: absolute;
   top: 80px;
-  right: 0px;
+  right: 6px;
   background: #ffffff;
   border-radius: 24px;
   padding: 24px;
@@ -513,7 +513,7 @@ input[type="range"] {
 .progress-wrap {
   display: block;
   position: relative;
-  padding-top: 12px; /* reserve vertical space for the value above the track */
+  padding-top: 0px; /* reserve vertical space for the value above the track */
 }
 .range-label { font-size: 11.9px; color: #000000; font-weight: 300; }
 .range-label.range-label-min { text-align: left; }
@@ -526,7 +526,7 @@ input[type="range"] {
   position: absolute;
   top: 0px;
   right: 0;
-  transform: translateY(-50%);
+  transform: translateY(-150%);
   background: transparent;
   white-space: nowrap;
 }
@@ -545,18 +545,30 @@ input[type="range"] {
 }
 
 /* Slider area (right) */
-.slider-wrap { width: 100%; display:flex; align-items:center; justify-content:center; }
+.slider-wrap {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  height: 64px;
+}
 .slider-large {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 32px;
+  max-width: 260px; /* limit track width so centering is visible */
+  height: 64px;
   background: transparent;
   position: relative;
+  margin: 0 auto; /* center within .slider-wrap */
+  display: block;
+  padding: 0;
 }
 .slider-large:focus { outline: none; }
 .slider-large::-webkit-slider-runnable-track {
   height: 32px;
+  transform: translateY(-16px);
   background: transparent; 
   background-image: url('./_exportedimage/_exportedimage/Group 185.svg');
   background-size: 100% 100%;
@@ -567,6 +579,7 @@ input[type="range"] {
 
 .slider-large::-moz-range-track {
   height: 32px;
+  transform: translateY(-16px);
   background: transparent;
   background-image: url('./_exportedimage/_exportedimage/Group 185.svg');
   background-size: 100% 100%; 
@@ -575,7 +588,7 @@ input[type="range"] {
   border-radius: 16px;
 }
 .slider-large::-webkit-slider-thumb {
-  -webkit-appearance: none;
+  -webkit-appearance: none; 
   appearance: none;
   width: 64px;
   height: 64px;
@@ -587,7 +600,8 @@ input[type="range"] {
   background-position: center;
   border: none;
   /* box-shadow: 0 8px 22px rgba(0,0,0,0.12); */
-  margin-top: -16px; /* center the large thumb */
+  margin-top: 0;
+  transform: translateY(-16px);
 }
 .slider-large::-moz-range-thumb {
   -moz-appearance: none;
@@ -602,6 +616,8 @@ input[type="range"] {
   background-position: center;
   border: none;
   /* box-shadow: 0 8px 22px rgba(0,0,0,0.12); */
+  margin-top: 0;
+  transform: translateY(-16px);
 }
 
 /* ensure labels and elements fit on small screens */
