@@ -48,7 +48,7 @@ button.icon-only {
   border: none;
   width: 56px;
   height: 56px;
-  padding: 56px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -58,11 +58,11 @@ button.icon-only img {
   width: 56px;
   height: 56px;
 }
-/* button.icon-only:hover {
+button.icon-only:hover {
   background: rgba(255, 122, 56, 0.1);
   border-radius: 12px;
   transform: none;
-} */
+}
 
 input[type="text"], input[type="number"], select, textarea, input[type="file"] {
   width: 100%;
@@ -362,7 +362,7 @@ input[type="range"] {
 #viewer { flex: 1; min-height: 520px; }
 .status-block { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .status-text { font-size: 14px; }
-.viewer-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.viewer-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 24px; }
 .sidebar {
   height: 100%;
   /* internal scrolling for sidebar content */
