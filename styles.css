@@ -299,7 +299,7 @@ input[type="range"] {
 /* End Effector Pose Card - Floating on viewer */
 .ee-pose-card {
   position: absolute;
-  top: 80px;
+  top: 90px;
   right: 6px;
   background: #ffffff;
   border-radius: 24px;
