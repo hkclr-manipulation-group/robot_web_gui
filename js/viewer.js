@@ -35,7 +35,7 @@ export class RobotViewer {
   _initScene() {
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xffffff);
+    this.scene.background = new THREE.Color(0xf6f6f6);
     this.scene.up.set(0, 0, 1);
 
   }
@@ -160,7 +160,7 @@ export class RobotViewer {
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 6),
       new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+        color: 0xf6f6f6,
         side: THREE.DoubleSide,
       })
     );
