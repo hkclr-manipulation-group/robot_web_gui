@@ -58,8 +58,8 @@ export class RobotViewer {
 
   _initCamera() {
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
-    this.camera.position.set(2.2, -2.0, 1.6);
+    this.camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
+    this.camera.position.set(0, -2, 2);
 
   }
 
@@ -233,9 +233,9 @@ export class RobotViewer {
     this.camera.position.copy(
       center.clone().add(
         new THREE.Vector3(
-          radius * 2.0,
-          -radius * 1.8,
-          radius * 1.2
+          radius * 0,
+          -radius * 2.5,
+          radius * 0.8
         )
       )
     );
