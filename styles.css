@@ -34,7 +34,9 @@ button, .inline-file, select, input[type="text"], input[type="number"] {
 }
 button {
   cursor: pointer;
-  padding: 9px 12px;
+  padding: 12px 18px;
+  font-size: 15px;
+  min-height: 44px;
   transition: 0.15s ease;
 }
 button:hover, .inline-file:hover { border-color: var(--accent); transform: translateY(-1px); }
@@ -44,16 +46,23 @@ button.danger { border-color: #6a3550; color: #ffd3d3; }
 button.icon-only {
   background: transparent;
   border: none;
-  padding: 4px;
+  width: 56px;
+  height: 56px;
+  padding: 56px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-button.icon-only:hover {
-  background: rgba(255, 122, 56, 0.1);
-  border-radius: 8px;
-  transform: none;
+button.icon-only svg,
+button.icon-only img {
+  width: 56px;
+  height: 56px;
 }
+/* button.icon-only:hover {
+  background: rgba(255, 122, 56, 0.1);
+  border-radius: 12px;
+  transform: none;
+} */
 
 input[type="text"], input[type="number"], select, textarea, input[type="file"] {
   width: 100%;
@@ -276,8 +285,8 @@ input[type="range"] {
   box-shadow: 0 6px 16px rgba(255, 122, 56, 0.5);
 } */
 .tab-icon {
-  width: 36px;
-  height: 24px;
+  width: 42px;
+  height: 28px;
   flex-shrink: 0;
 }
 
