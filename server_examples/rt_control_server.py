@@ -121,15 +121,15 @@ def send_to_robot(robot_id, update_func=None):
                 success, message = update_func(robot_id)
                 if not success: break
             
-            rt_panel_command.send_timestamp = int(time.time_ns() / 1e3)
-            udp.send(rt_panel_command)
-            time.sleep(udp_dt_send)
-            
-            if rt_panel_command.need_setting_update:
+            if rt_panel_command.need_setting_update and not first_update:
                 time_diff_sec = (rt_panel_command.send_timestamp - rt_planner_state.received_panel_command_timestamp)/1e6
                 if rt_planner_state.setting_update_finished and time_diff_sec < 10*udp_dt_send:
                     rt_panel_command.need_setting_update = False
                 print(f"time diff: {time_diff_sec:.3f} sec, smaller: {time_diff_sec < 10*udp_dt_send}")
+
+            rt_panel_command.send_timestamp = int(time.time_ns() / 1e3)
+            udp.send(rt_panel_command)
+            time.sleep(udp_dt_send)
             print(f"rt_panel_command.send_timestamp: {rt_panel_command.send_timestamp}, setting_update_finished: {rt_planner_state.setting_update_finished}, need_setting_update: {rt_panel_command.need_setting_update}")
         print("rt_panel_command.joint_cmd:", rt_panel_command.joint_cmd)
         send_to_robot_lock.release()
@@ -167,15 +167,13 @@ def enable_teach(robot_id, payload):
 def connect_to_hardware(robot_id, payload):
     global rt_panel_command, rt_planner_state
     if rt_planner_state is None: return False, "Open rt_control connection first."
-    
     if robot_id == "arm_v1":
-        prev_force_control = rt_panel_command.force_control
         rt_panel_command.simulation = False if payload.get("enable", False) else True
         rt_panel_command.force_control = RtForceControlMode.NONE
         rt_panel_command.target_type = ControlType.POSITION
         rt_panel_command.actuator_mode = ControlType.POSITION
         rt_panel_command.joint_cmd = rt_planner_state.joint_pos
-        rt_panel_command.need_setting_update = True if prev_force_control != rt_panel_command.force_control else False
+        rt_panel_command.need_setting_update = True
     return True, "Success"
 
 def post_request(robot_id, payload, update_func):
@@ -262,6 +260,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 while True:
                     rt_planner_state = udp.receive()
+                    # if rt_planner_state:
+                    #     print(f"Stream received: joint_pos={rt_planner_state.joint_pos}, ee_pose={rt_planner_state.ee_pose}")
                     ee_pose = rt_planner_state.ee_pose if rt_planner_state else [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
                     joint_pos = rt_planner_state.joint_pos if rt_planner_state else [0.0]*6
                     state = json.dumps({"ee_pose": ee_pose, "joint_pos": joint_pos})
