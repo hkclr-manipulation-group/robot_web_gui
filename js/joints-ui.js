@@ -147,15 +147,9 @@ export class JointsUI {
   }
 
   syncFromStreamData(q) {
-    this.jointNames.forEach((name) => {
-      const joint = this.jointMap[name];
-      const index = this.jointNames.indexOf(name);
+    this.jointNames.forEach((name, index) => {
       const value = q[index];
-      if (typeof joint.setJointValue === "function") {
-        joint.setJointValue(value);
-      } else {
-        joint.angle = value;
-      }
+      this.setJointValue(name, value, true);
     });
   }
 
