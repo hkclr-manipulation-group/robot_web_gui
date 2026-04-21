@@ -150,6 +150,13 @@ export class JointsUI {
     this.jointNames.forEach((name, index) => {
       const value = q[index];
       this.setJointValue(name, value, true);
+      
+      const joint = this.jointMap[name];
+      if (typeof joint.setJointValue === "function") {
+        joint.setJointValue(value);
+      } else {
+        joint.angle = value;
+      }
     });
   }
 
