@@ -301,35 +301,67 @@ function applyTaskPoseByIK(pose, options = {}) {
 /* -------------------------------------------------------------------------- */
 
 const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
-  onJointInput: () => {
+  onJointInput: (name, value) => {
     if (!kinematics || isSyncing) return;
 
     withSyncGuard(() => {
-      const map = kinematics.getCurrentJointMap();
-      // 假设 jointsUI 内部已经把 slider 当前值写入了 map 所对应的机器人状态
-      // 若 jointsUI 只是 UI，不会自动写入机器人，那么这里需要改成从 UI 读值
+      // 更新kinematics中的关节值以反映用户的目标值
+      const currentMap = kinematics.getCurrentJointMap();
+      currentMap[name] = value;
+      kinematics.setJointMap(currentMap);
+      
       refreshPoseReadout();
       syncTaskUiFromRobot();
       syncViewerFromRobot();
     });
   },
 
-  onJointCommitted: async () => {
-    if (!kinematics || isSyncing) return;
+  onJointCommitted: async (name, value) => {
+    if (!kinematics || isSyncing) {
+      console.warn(`[onJointCommitted] ${name}: Skipped (kinematics=${!!kinematics}, isSyncing=${isSyncing})`);
+      return;
+    }
 
+    // 验证值的合法性
+    if (value === undefined || value === null || isNaN(value)) {
+      console.error(`[onJointCommitted] ${name}: Invalid value received: ${value}`);
+      return;
+    }
+
+    console.log(`[onJointCommitted] ${name}: Received value=${value.toFixed(6)} rad (${(value * 180 / Math.PI).toFixed(2)}°)`);
+
+    // 使用滑动条传递的实际目标值构建命令
     const map = kinematics.getCurrentJointMap();
-
+    
+    // 检查当前值与目标值的差异
+    const currentValue = map[name];
+    console.log(`[onJointCommitted] ${name}: Current kinematics value=${currentValue?.toFixed(6) || 'undefined'}, Target value=${value.toFixed(6)}`);
+    
+    map[name] = value; // 确保使用最新的目标值
+    
     refreshPoseReadout();
     syncTaskUiFromRobot();
     syncViewerFromRobot();
-    const result = await sendJointCommand(Object.keys(map), Object.values(map));
-    console.log("Joint command result:", result);
-    if (result.mode === "preview") {
-      setStatus("Preview mode active. No gateway configured.", "warn");
-    }else if (result.data.success) {
-      setStatus("Successfully sent joint command.", "ok");
-    }else if (!result.data.success) {
-      setStatus(`Failed to sent joint command. ${result.data.message}`, "danger-text");
+    
+    console.log(`[onJointCommitted] ${name}: Sending command to backend...`);
+    try {
+      const result = await sendJointCommand(Object.keys(map), Object.values(map));
+      console.log(`[onJointCommitted] ${name}: Command result:`, result);
+      
+      if (result.mode === "preview") {
+        setStatus("Preview mode active. No gateway configured.", "warn");
+      } else if (result.data && result.data.success) {
+        setStatus("Successfully sent joint command.", "ok");
+        console.log(`[onJointCommitted] ${name}: ✅ Command succeeded`);
+      } else if (result.data && !result.data.success) {
+        setStatus(`Failed to sent joint command. ${result.data.message}`, "danger-text");
+        console.error(`[onJointCommitted] ${name}: ❌ Command failed: ${result.data.message}`);
+      } else {
+        console.warn(`[onJointCommitted] ${name}: Unexpected result format:`, result);
+      }
+    } catch (error) {
+      console.error(`[onJointCommitted] ${name}: Exception occurred:`, error);
+      setStatus(`Error sending command: ${error.message}`, "danger-text");
     }
   },
 });
@@ -810,16 +842,12 @@ function bindCardTabs() {
     const tabs = document.querySelectorAll(".tab-btn");
     const pages = document.querySelectorAll(".tab-page");
 
-    console.log("[robot_web_gui] bindCardTabs — Tabs found:", tabs.length);
-    console.log("[robot_web_gui] bindCardTabs — Pages found:", pages.length);
-
     if (!tabs.length) return;
 
     tabs.forEach((tab) => {
       tab.addEventListener("click", (e) => {
         e.preventDefault();
         const pageId = tab.dataset.page;
-        console.log("[robot_web_gui] Clicked tab:", pageId);
 
         // Remove active from all tabs and pages
         tabs.forEach((t) => t.classList.remove("active"));
@@ -830,7 +858,6 @@ function bindCardTabs() {
 
         // Add active to corresponding page
         const activePage = document.querySelector(`.tab-page[data-page="${pageId}"]`);
-        console.log("[robot_web_gui] Active page:", activePage);
         if (activePage) {
           activePage.classList.add("active");
         }

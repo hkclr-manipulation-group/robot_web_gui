@@ -1,15 +1,12 @@
 import {
   CONTINUOUS_RANGE,
-  PRISMATIC_FALLBACK_RANGE,
   ROTARY_FALLBACK_RANGE,
 } from "./config.js";
 
 import {
   clamp,
   cssSafe,
-  formatJointInput,
   formatJointValue,
-  parseJointInput,
 } from "./utils.js";
 
 export class JointsUI {
@@ -21,6 +18,7 @@ export class JointsUI {
     this.jointMap = {};
     this.uiMap = {}; // 缓存DOM
     this.jointNames = [];
+    this.interactingJoints = new Set(); // 记录正在交互的关节
   }
 
   /* ---------------- clear ---------------- */
@@ -45,7 +43,7 @@ export class JointsUI {
 
     const names = Object.keys(joints).filter((name) => {
       const type = joints[name]?.jointType;
-      return type === "revolute" || type === "continuous" || type === "prismatic";
+      return type === "revolute" || type === "continuous";
     });
 
     this.jointNames = names;
@@ -80,12 +78,10 @@ export class JointsUI {
 
   getValuesAsMap() {
     const map = {};
-
     this.jointNames.forEach((name) => {
       const joint = this.jointMap[name];
       map[name] = joint.angle ?? 0;
     });
-
     return map;
   }
 
@@ -102,27 +98,22 @@ export class JointsUI {
     if (!joint) return;
 
     joint.setVal = value;
-    // if (typeof joint.setJointValue === "function") {
-    //   joint.setJointValue(value);
-    // } else {
-    //   joint.angle = value;
-    // }
 
     if (!updateUi || !ui) return;
 
-    const isPrismatic = joint.jointType === "prismatic";
-
-    // slider UI uses degrees while internal value is radians
-    const toDeg = (r) => (r * 180) / Math.PI;
-    ui.slider.value = String(toDeg(value));
-    ui.value.textContent = formatJointValue(value, isPrismatic);
-    // update progress fill if present (map by degrees)
+    // 更新数值显示
+    ui.value.textContent = formatJointValue(value, false);
+    
+    // 更新进度条：映射到实际关节限位范围
     const card = ui.slider.closest('.joint-card');
     if (card) {
       const range = this.#getRange(joint);
+      const toDeg = (r) => (r * 180) / Math.PI;
+      const degValue = toDeg(value);
       const degMin = toDeg(range.min);
       const degMax = toDeg(range.max);
-      const pct = (toDeg(value) - degMin) / (degMax - degMin || 1);
+      const pct = (degValue - degMin) / (degMax - degMin || 1);
+      
       const fill = card.querySelector('.progress-fill');
       if (fill) fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
     }
@@ -148,7 +139,13 @@ export class JointsUI {
 
   syncFromStreamData(q) {
     this.jointNames.forEach((name, index) => {
+      // 如果该关节正在被用户交互，跳过同步以避免冲突
+      if (this.interactingJoints.has(name)) {
+        return;
+      }
+
       const value = q[index];
+      // 同步数据时更新UI，并更新基础值以便增量控制继续工作
       this.setJointValue(name, value, true);
       
       const joint = this.jointMap[name];
@@ -157,6 +154,11 @@ export class JointsUI {
       } else {
         joint.angle = value;
       }
+      
+      // 关键：更新UI缓存中的基础值，确保下一次增量操作基于最新实时值
+      if (this.uiMap[name]) {
+        this.uiMap[name].baseValue = value;
+      }
     });
   }
 
@@ -164,12 +166,8 @@ export class JointsUI {
 
   #createJointCard(name, joint) {
     const type = joint.jointType || "unknown";
-    const isPrismatic = type === "prismatic";
-
     const range = this.#getRange(joint);
     const current = Number.isFinite(joint.angle) ? joint.angle : 0;
-
-    const safe = cssSafe(name);
 
     const card = document.createElement("div");
     card.className = "joint-card";
@@ -179,110 +177,235 @@ export class JointsUI {
 
     const nameEl = document.createElement("div");
     nameEl.className = "joint-name";
-    nameEl.textContent = `${name} (${type})`;
+    nameEl.textContent = name;
 
     const valueEl = document.createElement("div");
     valueEl.className = "joint-value";
-    valueEl.textContent = formatJointValue(current, isPrismatic);
+    valueEl.textContent = formatJointValue(current, false);
 
     const slider = document.createElement("input");
     slider.type = "range";
-    // For prismatic joints, keep meters; for rotary use degrees in UI.
-    const deg = (v) => (v * 180) / Math.PI;
-    const rad = (d) => (d * Math.PI) / 180;
-    let sliderMin, sliderMax, sliderStep, sliderValue;
-    if (isPrismatic) {
-      sliderMin = range.min;
-      sliderMax = range.max;
-      sliderStep = range.step || 0.001;
-      sliderValue = clamp(current, range.min, range.max);
-    } else {
-      sliderMin = deg(range.min);
-      sliderMax = deg(range.max);
-      sliderStep = deg(range.step) || 0.1;
-      sliderValue = deg(clamp(current, range.min, range.max));
-    }
-    slider.min = String(sliderMin);
-    slider.max = String(sliderMax);
-    // use 'any' to avoid browser HTML5 validation tooltips when value/step
-    // floating-point rounding causes mismatches. keep original step on data attribute.
-    slider.setAttribute('data-step', String(sliderStep));
-    slider.step = 'any';
-    slider.value = String(Number.isFinite(sliderValue) ? sliderValue : 0);
+    slider.min = "-1";
+    slider.max = "1";
+    slider.step = "0.1"; // 改为0.1以确保平滑拖拽和事件触发
+    slider.value = "0";
+    
+    // 禁用默认过渡效果以实现即时响应
+    slider.style.transition = 'none';
 
     /* ---------- cache UI ---------- */
-
     this.uiMap[name] = {
       slider,
       value: valueEl,
+      baseValue: current, // 存储基础值用于增量计算
+      intervalId: null,   // 用于连续调节的定时器
+      lastDir: 0          // 初始化最后方向
     };
 
-    /* ---------- slider input ---------- */
+    /* ---------- slider events (Incremental Mode) ---------- */
+    const rad = (d) => (d * Math.PI) / 180;
+    const STEP_DEG = 1; // 每次步进1度
+    
+    // 核心动作：应用增量并累加
+    const applyAndAccumulate = (deltaDeg) => {
+      const ui = this.uiMap[name];
+      if (!ui) {
+        console.error(`[applyAndAccumulate] ${name}: UI not found!`);
+        return;
+      }
+      
+      let currentBase = ui.baseValue ?? 0;
+      let newValue = currentBase + rad(deltaDeg);
+      
+      // 获取关节范围并进行边界限制
+      const joint = this.jointMap[name];
+      if (joint) {
+        const range = this.#getRange(joint);
+        // 对于连续关节，不进行限制
+        if (joint.jointType !== "continuous") {
+          newValue = clamp(newValue, range.min, range.max);
+        }
+      }
+      
+      console.log(`[applyAndAccumulate] ${name}: delta=${deltaDeg}°, base=${currentBase.toFixed(6)}rad, new=${newValue.toFixed(6)}rad (${(newValue * 180 / Math.PI).toFixed(2)}°)`);
+      
+      // 更新显示
+      ui.value.textContent = formatJointValue(newValue, false);
+      
+      // 更新 baseValue 以便下一次累加
+      ui.baseValue = newValue;
+      
+      // 发送指令 (实时回调)
+      console.log(`[applyAndAccumulate] ${name}: Calling onJointInput with value=${newValue.toFixed(6)}`);
+      this.callbacks?.onJointInput?.(name, newValue);
+    };
 
-    slider.addEventListener("input", (e) => {
-      const raw = parseFloat(e.target.value);
-      const valueRad = isPrismatic ? raw : rad(raw);
+    // 开始移动（启动定时器）
+    const startMoving = (direction) => {
+       const ui = this.uiMap[name];
+       if (!ui) {
+         console.error(`[startMoving] ${name}: UI not found!`);
+         return;
+       }
 
-      this.setJointValue(name, valueRad, false);
+       console.log(`[startMoving] ${name}: direction=${direction}, current baseValue=${ui.baseValue?.toFixed(6) || 'undefined'}`);
 
-      // update displayed value and progress fill
-      valueEl.textContent = formatJointValue(valueRad, isPrismatic);
-      const fill = card.querySelector('.progress-fill');
-      if (fill) {
-        const a = isPrismatic ? sliderMin : sliderMin; // already in UI units
-        const b = isPrismatic ? sliderMax : sliderMax;
-        const pct = (raw - a) / (b - a || 1);
-        fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+       // 如果方向没变，不要重启定时器，避免闪烁
+       if (ui.lastDir === direction && ui.intervalId) {
+         console.log(`[startMoving] ${name}: Same direction, skipping restart`);
+         return;
+       }
+
+       // 标记该关节正在被交互
+       this.interactingJoints.add(name);
+       console.log(`[startMoving] ${name}: Added to interactingJoints`);
+
+       // 清除旧的
+       if (ui.intervalId) {
+         console.log(`[startMoving] ${name}: Clearing old interval`);
+         clearInterval(ui.intervalId);
+       }
+       
+       // 立即执行一次
+       console.log(`[startMoving] ${name}: Executing first step`);
+       applyAndAccumulate(direction * STEP_DEG);
+       
+       // 记录方向
+       ui.lastDir = direction;
+
+       // 连续执行 (每150ms一次)
+       console.log(`[startMoving] ${name}: Starting interval (150ms)`);
+       ui.intervalId = setInterval(() => {
+         applyAndAccumulate(direction * STEP_DEG);
+       }, 150); 
+    };
+
+    // 停止移动
+    const stopMoving = () => {
+      const ui = this.uiMap[name];
+      if (!ui) return;
+
+      // 如果没有正在运行的定时器，说明已经停止过了，避免重复提交
+      if (!ui.intervalId && ui.lastDir === 0) {
+        console.log(`[stopMoving] ${name}: Already stopped, skipping`);
+        return;
       }
 
-      // callbacks receive radians (internal units)
-      this.callbacks?.onJointInput?.(name, valueRad);
+      console.log(`[stopMoving] ${name}: Stopping, final baseValue=${ui.baseValue?.toFixed(6) || 'undefined'}`);
+
+      if (ui.intervalId) {
+        clearInterval(ui.intervalId);
+        ui.intervalId = null;
+        console.log(`[stopMoving] ${name}: Interval cleared`);
+      }
+      
+      // 保存最终值（在清除锁之前），确保不会被外部数据流干扰
+      const finalValue = ui.baseValue;
+      console.log(`[stopMoving] ${name}: Saved finalValue=${finalValue?.toFixed(6) || 'undefined'}`);
+      
+      // 清除交互锁标记
+      this.interactingJoints.delete(name);
+      console.log(`[stopMoving] ${name}: Removed from interactingJoints`);
+      
+      // 重置方向（必须在提交之前，防止重复启动）
+      ui.lastDir = 0;
+      
+      // 提交最终状态（使用保存的值，确保安全）
+      if (finalValue !== undefined && finalValue !== null) {
+        console.log(`[stopMoving] ${name}: Calling onJointCommitted with value=${finalValue.toFixed(6)} (${(finalValue * 180 / Math.PI).toFixed(2)}°)`);
+        this.callbacks?.onJointCommitted?.(name, finalValue);
+      } else {
+        console.error(`[stopMoving] ${name}: Invalid finalValue!`);
+      }
+      
+      // 滑块视觉上回中 (延迟一点，确保 change 事件处理完)
+      setTimeout(() => {
+        if (ui.slider) {
+          ui.slider.value = "0";
+          console.log(`[stopMoving] ${name}: Slider reset to 0`);
+        }
+      }, 10);
+    };
+
+    // 监听 input 事件 - 使用阈值判断方向
+    slider.addEventListener("input", (e) => {
+      const rawVal = parseFloat(e.target.value);
+      console.log(`[Slider Input] ${name}: rawVal=${rawVal}, type=${typeof rawVal}`);
+      
+      // 阈值判断：大于0.5视为向右，小于-0.5视为向左
+      if (rawVal > 0.5) {
+        console.log(`[Slider] ${name}: Moving RIGHT`);
+        startMoving(1); // 向右
+      } else if (rawVal < -0.5) {
+        console.log(`[Slider] ${name}: Moving LEFT, value=${rawVal}`);
+        startMoving(-1); // 向左
+      } else {
+        console.log(`[Slider] ${name}: Stopped (center), value=${rawVal}`);
+        // 在中间区域，停止任何连续移动
+        const ui = this.uiMap[name];
+        if (ui && ui.intervalId) {
+          stopMoving();
+        }
+      }
+    });
+    
+    // 监听结束事件，确保停止
+    const handleEnd = () => {
+      stopMoving();
+    };
+
+    slider.addEventListener("change", handleEnd);
+    slider.addEventListener("mouseup", handleEnd);
+    slider.addEventListener("touchend", handleEnd);
+    // 防止鼠标移出滑块区域后仍然持续移动
+    slider.addEventListener("mouseleave", () => {
+      // 鼠标移出时停止移动
+      stopMoving();
     });
 
-    /* ---------- slider commit ---------- */
-
-    slider.addEventListener("change", async (e) => {
-      const raw = parseFloat(e.target.value);
-      const valueRad = isPrismatic ? raw : rad(raw);
-      await this.callbacks?.onJointCommitted?.(name, valueRad);
-    });
-
-    // numeric input removed — changes are handled via slider
-
+    /* ---------- Layout Construction ---------- */
     const controls = document.createElement("div");
     controls.className = "joint-controls";
 
-    // build progress preview (left) and large slider (right)
+    // 1. Progress Preview (Left)
     const progressWrap = document.createElement('div');
     progressWrap.className = 'progress-wrap';
+    progressWrap.appendChild(valueEl);
 
-      // show joint current value above the progress track
-      progressWrap.appendChild(valueEl);
+    const progressTrack = document.createElement('div');
+    progressTrack.className = 'progress-track';
+    const progressFill = document.createElement('div');
+    progressFill.className = 'progress-fill';
+    
+    // 初始化进度条：映射到实际关节限位
+    const toDeg = (r) => (r * 180) / Math.PI;
+    const degCurrent = toDeg(current);
+    const degMin = toDeg(range.min);
+    const degMax = toDeg(range.max);
+    const pctInit = (degCurrent - degMin) / (degMax - degMin || 1);
+    progressFill.style.width = `${Math.max(0, Math.min(1, pctInit)) * 100}%`;
+    
+    progressTrack.appendChild(progressFill);
 
-      const progressTrack = document.createElement('div');
-      progressTrack.className = 'progress-track';
-      const progressFill = document.createElement('div');
-      progressFill.className = 'progress-fill';
-      const pctInit = (sliderValue - sliderMin) / (sliderMax - sliderMin || 1);
-      progressFill.style.width = `${Math.max(0, Math.min(1, pctInit)) * 100}%`;
-      progressTrack.appendChild(progressFill);
+    // 标签：显示实际限位
+    const labelsRow = document.createElement('div');
+    labelsRow.className = 'range-labels';
+    
+    const minLabel = document.createElement('div');
+    minLabel.className = 'range-label range-label-min';
+    minLabel.textContent = String(Math.round(toDeg(range.min))) + "°";
+    
+    const maxLabel = document.createElement('div');
+    maxLabel.className = 'range-label range-label-max';
+    maxLabel.textContent = String(Math.round(toDeg(range.max))) + "°";
+    
+    labelsRow.appendChild(minLabel);
+    labelsRow.appendChild(maxLabel);
 
-      // labels row below the track: min left, max right
-      const minLabel = document.createElement('div');
-      minLabel.className = 'range-label range-label-min';
-      minLabel.textContent = String(Math.round(isPrismatic ? sliderMin : sliderMin));
-      const maxLabel = document.createElement('div');
-      maxLabel.className = 'range-label range-label-max';
-      maxLabel.textContent = String(Math.round(isPrismatic ? sliderMax : sliderMax));
+    progressWrap.appendChild(progressTrack);
+    progressWrap.appendChild(labelsRow);
 
-      const labelsRow = document.createElement('div');
-      labelsRow.className = 'range-labels';
-      labelsRow.appendChild(minLabel);
-      labelsRow.appendChild(maxLabel);
-
-      progressWrap.appendChild(progressTrack);
-      progressWrap.appendChild(labelsRow);
-
+    // 2. Slider (Right)
     const sliderWrap = document.createElement('div');
     sliderWrap.className = 'slider-wrap';
     slider.className = 'slider-large';
@@ -292,7 +415,6 @@ export class JointsUI {
     controls.appendChild(sliderWrap);
 
     top.appendChild(nameEl);
-
     card.appendChild(top);
     card.appendChild(controls);
 
@@ -302,24 +424,19 @@ export class JointsUI {
   /* ---------------- range ---------------- */
 
   #getRange(joint) {
-    const type = joint.jointType;
-
-    if (type === "continuous") return CONTINUOUS_RANGE;
-
-    const fallback =
-      type === "prismatic"
-        ? PRISMATIC_FALLBACK_RANGE
-        : ROTARY_FALLBACK_RANGE;
-
+    const fallback = ROTARY_FALLBACK_RANGE;
     let min = fallback.min;
     let max = fallback.max;
-    const step = fallback.step;
 
     if (joint.limit) {
       if (Number.isFinite(joint.limit.lower)) min = joint.limit.lower;
       if (Number.isFinite(joint.limit.upper)) max = joint.limit.upper;
     }
 
-    return { min, max, step };
+    if (joint.jointType === "continuous") {
+      return CONTINUOUS_RANGE;
+    }
+
+    return { min, max, step: fallback.step };
   }
 }
