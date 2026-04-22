@@ -20,6 +20,7 @@ import {
 } from "./api.js";
 
 import { JointsUI } from "./joints-ui.js";
+import { KinematicsLab } from "./kinematics-lab.js";
 import { RobotKinematics } from "./kinematics.js";
 import { planCartesianTrajectory, planJointTrajectory } from "./planner.js";
 import { saveTrajectoryToFile, loadTrajectoryFromFile } from "./storage.js";
@@ -47,6 +48,7 @@ const robotIdTextEl = document.getElementById("robotIdText");
 const jointCountEl = document.getElementById("jointCount");
 const jointContainerEl = document.getElementById("jointContainer");
 const taskSpaceContainerEl = document.getElementById("taskSpaceContainer");
+const kinematicsLabContainerEl = document.getElementById("kinematicsLabPage");
 
 const eePoseEl = document.getElementById("eePose");
 const baseLinkEl = document.getElementById("baseLink");
@@ -231,7 +233,7 @@ function applyJointVector(q, options = {}) {
   const { syncJointUi = true, syncTaskUi = true, syncViewer = true } = options;
 
   withSyncGuard(() => {
-    // kinematics.setJointVector(q);
+    kinematics.setJointVector(q);
 
     const map = vectorToMap(q);
 
@@ -309,7 +311,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       const currentMap = kinematics.getCurrentJointMap();
       currentMap[name] = value;
       kinematics.setJointMap(currentMap);
-      
+      robot?.updateMatrixWorld(true);
       refreshPoseReadout();
       syncTaskUiFromRobot();
       syncViewerFromRobot();
@@ -364,6 +366,11 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       setStatus(`Error sending command: ${error.message}`, "danger-text");
     }
   },
+});
+
+const kinematicsLab = new KinematicsLab(kinematicsLabContainerEl, {
+  viewer,
+  setStatus,
 });
 
 // const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
@@ -428,6 +435,7 @@ async function loadCurrentRobot(path) {
     viewer.setRobot(robot);
     // robot.updateMatrixWorld(true);
     kinematics = new RobotKinematics(robot);
+    kinematicsLab.setRobotContext(kinematics);
 
     jointsUI.build(robot);
 

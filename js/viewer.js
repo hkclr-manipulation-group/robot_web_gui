@@ -21,6 +21,7 @@ export class RobotViewer {
     this._initLights();
     this._initHelpers();
     this._initTarget();
+    this._initLabObjects();
 
     this._resize();
 
@@ -194,6 +195,29 @@ export class RobotViewer {
 
   }
 
+  _initLabObjects() {
+
+    this.labMarkers = {};
+    this.labTrajectories = {};
+
+    const markerRadius = 0.018;
+    // 仅学生（蓝）与 IK 实际（红）；不创建绿色 reference / target 球
+    const markerConfigs = {
+      student: 0x2f80ed,
+      actual: 0xeb5757,
+    };
+
+    Object.entries(markerConfigs).forEach(([key, color]) => {
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(markerRadius, 24, 24),
+        new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.18 })
+      );
+      marker.visible = false;
+      this.labMarkers[key] = marker;
+      this.scene.add(marker);
+    });
+  }
+
   /* ---------------- Robot ---------------- */
 
   setRobot(robot) {
@@ -300,6 +324,69 @@ updateTargetPose(pose) {
   // this._lock = false;
 
 }
+
+  setLabMarkers(markers = {}) {
+
+    if (!this.labMarkers) return;
+
+    Object.entries(this.labMarkers).forEach(([key, marker]) => {
+      const point = markers[key];
+      if (!point) {
+        marker.visible = false;
+        return;
+      }
+
+      marker.position.set(point.x || 0, point.y || 0, point.z || 0);
+      marker.visible = true;
+    });
+
+  }
+
+  setLabTrajectories({ target = [], actual = [] } = {}) {
+
+    this.#disposeTrajectory("target");
+    this.#disposeTrajectory("actual");
+
+    if (target.length > 1) {
+      this.labTrajectories.target = this.#buildTrajectoryLine(target, 0x2f80ed);
+      this.scene.add(this.labTrajectories.target);
+    }
+
+    if (actual.length > 1) {
+      this.labTrajectories.actual = this.#buildTrajectoryLine(actual, 0xeb5757);
+      this.scene.add(this.labTrajectories.actual);
+    }
+
+  }
+
+  clearLabVisualization() {
+
+    this.setLabMarkers({});
+    this.setLabTrajectories({ target: [], actual: [] });
+
+  }
+
+  #buildTrajectoryLine(points, color) {
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(
+      points.map((point) => new THREE.Vector3(point.x || 0, point.y || 0, point.z || 0))
+    );
+    const material = new THREE.LineBasicMaterial({ color });
+    return new THREE.Line(geometry, material);
+
+  }
+
+  #disposeTrajectory(key) {
+
+    const line = this.labTrajectories?.[key];
+    if (!line) return;
+
+    this.scene.remove(line);
+    line.geometry?.dispose?.();
+    line.material?.dispose?.();
+    delete this.labTrajectories[key];
+
+  }
 
   /* ---------------- View reset ---------------- */
 

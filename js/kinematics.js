@@ -3,25 +3,57 @@ import { IK_DEFAULTS } from './config.js';
 import { dampedLeastSquares, matrixToPose, quaternionError, vectorNorm } from './utils.js';
 
 function getChain(robot) {
-  const joints = Object.entries(robot.joints || {})
-    .filter(([, joint]) => ['revolute', 'continuous', 'prismatic'].includes(joint.jointType))
-    .map(([name, joint]) => ({ name, joint }));
+  const jointsDict = robot.joints || {};
+  const movable = Object.keys(jointsDict)
+    .filter((name) => {
+      const type = jointsDict[name]?.jointType;
+      return type === 'revolute' || type === 'continuous' || type === 'prismatic';
+    })
+    .map((name) => ({ name, joint: jointsDict[name] }));
 
-  joints.sort((a, b) => {
-    const da = a.joint.parent ? a.joint.parent.matrixWorld.elements[13] : 0;
-    const db = b.joint.parent ? b.joint.parent.matrixWorld.elements[13] : 0;
-    return da - db;
+  if (movable.length <= 1) return movable;
+
+  // Build a serial chain by URDF topology: parent-link -> joint -> child-link.
+  const childLinks = new Set();
+  const jointsByParentLink = new Map();
+  movable.forEach((item) => {
+    const parentLinkName = item.joint?.parent?.name;
+    const childLinkName = item.joint?.children?.[0]?.name;
+    if (parentLinkName) {
+      if (!jointsByParentLink.has(parentLinkName)) jointsByParentLink.set(parentLinkName, []);
+      jointsByParentLink.get(parentLinkName).push(item);
+    }
+    if (childLinkName) childLinks.add(childLinkName);
   });
 
-  return joints;
+  const head = movable.find((item) => {
+    const parentLinkName = item.joint?.parent?.name;
+    return parentLinkName && !childLinks.has(parentLinkName);
+  }) || movable[0];
+
+  const ordered = [];
+  const used = new Set();
+  let current = head;
+  while (current && !used.has(current.name)) {
+    ordered.push(current);
+    used.add(current.name);
+    const nextParent = current.joint?.children?.[0]?.name;
+    const next = nextParent
+      ? (jointsByParentLink.get(nextParent) || []).find((item) => !used.has(item.name))
+      : null;
+    if (!next) break;
+    current = next;
+  }
+
+  if (ordered.length === movable.length) return ordered;
+  return [...ordered, ...movable.filter((item) => !used.has(item.name))];
 }
 
 function getTipObject(robot, chain) {
+  if (robot.links && robot.links.arm_end_effector) return robot.links.arm_end_effector;
   if (robot.links && robot.links.tool0) return robot.links.tool0;
   if (robot.links && robot.links.ee_link) return robot.links.ee_link;
   if (robot.links && robot.links.tcp) return robot.links.tcp;
-  const lastJoint = chain[chain.length - 1]?.joint;
-  if (lastJoint?.children?.length) return lastJoint.children[0];
   let last = robot;
   robot.traverse((obj) => { if (obj.isURDFLink || obj.isObject3D) last = obj; });
   return last;
@@ -86,6 +118,7 @@ export class RobotKinematics {
     this.robot = robot;
     this.chain = getChain(robot);
     this.tip = getTipObject(robot, this.chain);
+    console.log(this.tip);
     this.baseLinkName = this.chain[0]?.joint?.parent?.name || robot.name || 'base';
     this.tipLinkName = this.tip?.name || 'tip';
   }
@@ -100,7 +133,13 @@ export class RobotKinematics {
 
   getCurrentJointMap() {
     const out = {};
-    this.chain.forEach((item) => { out[item.name] = Number.isFinite(item.joint.setVal) ? item.joint.setVal : 0; });
+    this.chain.forEach((item) => {
+      const j = item.joint;
+      const v = Number.isFinite(j.angle)
+        ? j.angle
+        : (Number.isFinite(j.setVal) ? j.setVal : 0);
+      out[item.name] = v;
+    });
     return out;
   }
 
@@ -123,6 +162,19 @@ export class RobotKinematics {
   getEndEffectorPose() {
     this.robot.updateMatrixWorld(true);
     return matrixToPose(this.tip.matrixWorld);
+  }
+
+  getEndEffectorMatrix() {
+    this.robot.updateMatrixWorld(true);
+    return this.tip.matrixWorld.clone();
+  }
+
+  /** Tip origin in scene meters, matching the FK reference frame. */
+  getEndEffectorPositionMeters() {
+    this.robot.updateMatrixWorld(true);
+    const p = new THREE.Vector3();
+    this.tip.getWorldPosition(p);
+    return { x: p.x, y: p.y, z: p.z };
   }
 
   solveIK(targetPose, q0 = null, options = {}) {

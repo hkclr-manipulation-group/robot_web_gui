@@ -98,6 +98,11 @@ export class JointsUI {
     if (!joint) return;
 
     joint.setVal = value;
+    if (typeof joint.setJointValue === "function") {
+      joint.setJointValue(value);
+    } else {
+      joint.angle = value;
+    }
 
     if (!updateUi || !ui) return;
 
@@ -147,14 +152,7 @@ export class JointsUI {
       const value = q[index];
       // 同步数据时更新UI，并更新基础值以便增量控制继续工作
       this.setJointValue(name, value, true);
-      
-      const joint = this.jointMap[name];
-      if (typeof joint.setJointValue === "function") {
-        joint.setJointValue(value);
-      } else {
-        joint.angle = value;
-      }
-      
+
       // 关键：更新UI缓存中的基础值，确保下一次增量操作基于最新实时值
       if (this.uiMap[name]) {
         this.uiMap[name].baseValue = value;
