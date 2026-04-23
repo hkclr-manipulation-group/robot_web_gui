@@ -76,6 +76,7 @@ let lastGoalPose = null;
 
 const RETRY_DELAY = 3000;
 let robotStream = null; // EventSource for streaming robot data from gateway
+let robotStreamRetryTimer = null;
 
 const teachSystem = new TeachSystem();
 
@@ -444,9 +445,11 @@ async function loadCurrentRobot(path) {
     localStorage.setItem(STORAGE_KEYS.lastUrdfPath, path);
 
     setStatus("URDF loaded.", "ok");
+    return true;
   } catch (error) {
     console.error(error);
     setStatus(`Failed to load URDF: ${error.message || error}`, "danger-text");
+    return false;
   }
 }
 
@@ -581,6 +584,7 @@ function bindButtons() {
     if (!kinematics) return;
     viewer.fitToRobot();
     const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
+    const jointNames = kinematics.getJointNames();
 
     applyJointVector(zeroQ, {
       syncJointUi: true,
@@ -588,7 +592,7 @@ function bindButtons() {
       syncViewer: true,
     });
 
-    const result = await sendHomeCommand(Object.keys(zeroQ), Object.values(zeroQ));
+    const result = await sendHomeCommand(jointNames, zeroQ);
     if (result.mode === "preview") {
       setStatus("Preview mode active. No gateway configured.", "warn");
     }else if (result.data.success) {
@@ -881,29 +885,56 @@ function bindCardTabs() {
 }
 
 function connectStream(url) {
-  if (robotStream) {
-      robotStream.close();
+  const gatewayUrl = (url || "").trim().replace(/\/+$/, "");
+
+  if (robotStreamRetryTimer) {
+    clearTimeout(robotStreamRetryTimer);
+    robotStreamRetryTimer = null;
   }
 
-  robotStream = new EventSource(url + "/stream");
-  
+  if (robotStream) {
+    robotStream.close();
+    robotStream = null;
+  }
+
+  if (!gatewayUrl) return;
+
+  const normalizeStreamArray = (value) => {
+    if (!Array.isArray(value)) return null;
+    return Array.isArray(value[0]) ? value[0] : value;
+  };
+
+  robotStream = new EventSource(`${gatewayUrl}/stream`);
+
   robotStream.onmessage = (event) => {
+    try {
       const data = JSON.parse(event.data);
-      const position = data.ee_pose[0].slice(0, 3);
-      const quaternion = data.ee_pose[0].slice(3, 7);
-      const joint_position = data.joint_pos[0];
-      
-      // Update EE Pose Card
-      updateEePoseCard(position);
-      
-      // syncViewerFromStreamData(position, quaternion);
-      jointsUI.syncFromStreamData(joint_position);
+      const eePose = normalizeStreamArray(data.ee_pose);
+      const jointPosition = normalizeStreamArray(data.joint_pos);
+
+      if (eePose?.length >= 3) {
+        updateEePoseCard(eePose.slice(0, 3));
+      }
+
+      if (jointPosition?.length) {
+        jointsUI.syncFromStreamData(jointPosition);
+      }
+    } catch (error) {
+      console.error("Failed to parse stream payload:", error, event.data);
+    }
   };
 
   robotStream.onerror = (err) => {
-      console.error("Stream failed:", err);
+    console.error("Stream failed:", err);
+
+    if (robotStream) {
       robotStream.close();
-      setTimeout(connectStream(url), RETRY_DELAY); //Retry
+      robotStream = null;
+    }
+
+    robotStreamRetryTimer = setTimeout(() => {
+      connectStream(gatewayUrl);
+    }, RETRY_DELAY);
   };
 }
 
@@ -924,7 +955,7 @@ function updateEePoseCard(position) {
 /* Boot                                                                        */
 /* -------------------------------------------------------------------------- */
 
-(function boot() {
+(async function boot() {
   populateRobotSelector();
 
   const savedGateway = localStorage.getItem(STORAGE_KEYS.gatewayUrl) || "";
@@ -961,5 +992,9 @@ function updateEePoseCard(position) {
 
   connectStream(savedGateway);
 
-  loadCurrentRobot(savedUrdf);
+  const loaded = await loadCurrentRobot(savedUrdf);
+  if (!loaded && savedUrdf !== DEFAULT_URDF_PATH) {
+    urdfPathEl.value = DEFAULT_URDF_PATH;
+    await loadCurrentRobot(DEFAULT_URDF_PATH);
+  }
 })();
