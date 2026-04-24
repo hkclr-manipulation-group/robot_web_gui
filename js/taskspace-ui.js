@@ -103,10 +103,10 @@ export class TaskSpaceUI {
 
     block.appendChild(fragment);
 
-    const actions = this.#buildActions();
+    // const actions = this.#buildActions();
 
     this.container.appendChild(block);
-    this.container.appendChild(actions);
+    // this.container.appendChild(actions);
 
     if (initialPose) this.setPose(initialPose);
 
@@ -114,36 +114,36 @@ export class TaskSpaceUI {
 
   /* ---------------- actions ---------------- */
 
-  #buildActions() {
+  // #buildActions() {
 
-    const actions = document.createElement("div");
-    actions.className = "task-actions";
+  //   const actions = document.createElement("div");
+  //   actions.className = "task-actions";
 
-    const setBtn = document.createElement("button");
-    setBtn.textContent = "Set Goal";
+  //   const setBtn = document.createElement("button");
+  //   setBtn.textContent = "Set Goal";
 
-    const planBtn = document.createElement("button");
-    planBtn.textContent = "Plan Cartesian";
+  //   const planBtn = document.createElement("button");
+  //   planBtn.textContent = "Plan Cartesian";
 
-    const syncBtn = document.createElement("button");
-    syncBtn.textContent = "Sync Current";
+  //   const syncBtn = document.createElement("button");
+  //   syncBtn.textContent = "Sync Current";
 
-    setBtn.onclick =
-      () => this.callbacks?.onSetGoal?.(this.getPose());
+  //   setBtn.onclick =
+  //     () => this.callbacks?.onSetGoal?.(this.getPose());
 
-    planBtn.onclick =
-      () => this.callbacks?.onPlanPose?.(this.getPose());
+  //   planBtn.onclick =
+  //     () => this.callbacks?.onPlanPose?.(this.getPose());
 
-    syncBtn.onclick =
-      () => this.callbacks?.onReadCurrent?.();
+  //   syncBtn.onclick =
+  //     () => this.callbacks?.onReadCurrent?.();
 
-    actions.appendChild(setBtn);
-    actions.appendChild(planBtn);
-    actions.appendChild(syncBtn);
+  //   actions.appendChild(setBtn);
+  //   actions.appendChild(planBtn);
+  //   actions.appendChild(syncBtn);
 
-    return actions;
+  //   return actions;
 
-  }
+  // }
 
   /* ---------------- IK debounce ---------------- */
 

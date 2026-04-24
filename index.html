@@ -92,9 +92,9 @@
           </svg>
           <span class="tab-label">Joint</span>
         </button>
-        <button type="button" class="tab-btn" data-page="task" style="display: none;">
-          <svg class="tab-icon" viewBox="0 0 24 24" preserveAspectRatio="none"fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z" fill="currentColor"/>
+        <button type="button" class="tab-btn" data-page="task">
+          <svg class="tab-icon" viewBox="0 0 32 32" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21.8691 5.88965C22.4159 6.43638 22.4159 7.32241 21.8691 7.86914C21.3224 8.41587 20.4364 8.41587 19.8896 7.86914L17.3799 5.35938V14.5791H26.5986L24.0898 12.0693C23.5431 11.5226 23.5431 10.6366 24.0898 10.0898C24.6366 9.54311 25.5226 9.54311 26.0693 10.0898L31.959 15.9795L26.0693 21.8691C25.5226 22.4159 24.6366 22.4159 24.0898 21.8691C23.5431 21.3224 23.5431 20.4364 24.0898 19.8896L26.5986 17.3799H17.3799V26.5986L19.8896 24.0898C20.4364 23.5431 21.3224 23.5431 21.8691 24.0898C22.4159 24.6366 22.4159 25.5226 21.8691 26.0693L15.9795 31.959L10.0898 26.0693C9.54311 25.5226 9.54311 24.6366 10.0898 24.0898C10.6366 23.5431 11.5226 23.5431 12.0693 24.0898L14.5791 26.5986V17.3799H5.36035L7.86914 19.8896C8.41587 20.4364 8.41587 21.3224 7.86914 21.8691C7.32241 22.4159 6.43638 22.4159 5.88965 21.8691L0 15.9795L5.88965 10.0898C6.43638 9.54311 7.32241 9.54311 7.86914 10.0898C8.41587 10.6366 8.41587 11.5226 7.86914 12.0693L5.36035 14.5791H14.5791V5.35938L12.0693 7.86914C11.5226 8.41587 10.6366 8.41587 10.0898 7.86914C9.54311 7.32241 9.54311 6.43638 10.0898 5.88965L15.9795 0L21.8691 5.88965Z" fill="currentColor"/>
           </svg>
           <span class="tab-label">Task</span>
         </button>
@@ -131,13 +131,12 @@
           <div id="jointContainer" class="joint-list"></div>
         </section>
 
-        <!-- <section class="card tab-page" data-page="task"> -->
-        <section class="card tab-page" data-page="task" style="display: none;">
+        <section class="card tab-page" data-page="task">
           <div class="card-title-row sticky-title">
             <!-- <h2>Task Space</h2> -->
             <div class="row-actions">
-              <button id="readCurrentPoseBtn">Read Current</button>
-              <button id="capturePoseGoalBtn">Capture Goal</button>
+              <button id="readCurrentPoseBtn" style="display: none;">Read Current</button>
+              <button id="capturePoseGoalBtn" style="display: none;">Capture Goal</button>
             </div>
           </div>
           <div id="taskSpaceContainer"></div>

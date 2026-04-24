@@ -181,9 +181,9 @@ function syncViewerFromRobot() {
 }
 
 function syncTaskUiFromRobot() {
-  // if (!kinematics) return;
-  // const pose = kinematics.getEndEffectorPose();
-  // taskUI.setPose(pose);
+  if (!kinematics) return;
+  const pose = kinematics.getEndEffectorPose();
+  taskUI.setPose(pose);
 }
 
 function syncViewerFromStreamData(position, quaternion) {
@@ -203,7 +203,7 @@ function syncMeta() {
   if (!pose) return;
 
   refreshPoseReadout();
-  // taskUI.setPose(pose);
+  taskUI.setPose(pose);
 
 }
 
@@ -396,37 +396,37 @@ const kinematicsLab = new KinematicsLab(kinematicsLabContainerEl, {
   setStatus,
 });
 
-// const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
-//   onReadCurrent: () => {
-//     if (!kinematics) return;
-//     taskUI.setPose(kinematics.getEndEffectorPose());
-//   },
+const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
+  onReadCurrent: () => {
+    if (!kinematics) return;
+    taskUI.setPose(kinematics.getEndEffectorPose());
+  },
 
-//   onMove: (pose) => {
-//     if (!kinematics || isSyncing) return;
+  onMove: (pose) => {
+    if (!kinematics || isSyncing) return;
 
-//     const ok = applyTaskPoseByIK(pose, {
-//       syncJointUi: true,
-//       syncTaskUi: true,
-//       syncViewer: true,
-//     });
+    const ok = applyTaskPoseByIK(pose, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
 
-//     if (!ok) {
-//       setStatus("IK solve failed for task move.", "warn");
-//     }
-//   },
+    if (!ok) {
+      setStatus("IK solve failed for task move.", "warn");
+    }
+  },
 
-//   onSetGoal: (pose) => {
-//     lastGoalPose = pose;
-//     setStatus("Task-space goal snapshot captured.", "ok");
-//   },
+  onSetGoal: (pose) => {
+    lastGoalPose = pose;
+    setStatus("Task-space goal snapshot captured.", "ok");
+  },
 
-//   onPlanPose: () => {
-//     document.getElementById("planCartesianBtn").click();
-//   },
-// });
+  onPlanPose: () => {
+    document.getElementById("planCartesianBtn").click();
+  },
+});
 
-// taskUI.build();
+taskUI.build();
 
 /* -------------------------------------------------------------------------- */
 /* Viewer callbacks                                                            */
