@@ -304,7 +304,7 @@ function applyTaskPoseByIK(pose, options = {}) {
 /* -------------------------------------------------------------------------- */
 
 const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
-  onJointInput: (name, value) => {
+  onJointInput: async (name, value) => {
     if (!kinematics || isSyncing) return;
 
     withSyncGuard(() => {
@@ -317,6 +317,25 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       syncTaskUiFromRobot();
       syncViewerFromRobot();
     });
+
+    // 实时下发命令到机器人
+    try {
+      const jointNames = Object.keys(kinematics.getCurrentJointMap());
+      const jointValues = Object.values(kinematics.getCurrentJointMap());
+      console.log(`[onJointInput] ${name}: Sending real-time command with value=${value.toFixed(6)} rad (${(value * 180 / Math.PI).toFixed(2)}°)`);
+      
+      const result = await sendJointCommand(jointNames, jointValues);
+      
+      if (result.mode === "preview") {
+        console.warn(`[onJointInput] ${name}: Preview mode - no gateway configured`);
+      } else if (result.data && result.data.success) {
+        console.log(`[onJointInput] ${name}: ✅ Real-time command succeeded`);
+      } else if (result.data && !result.data.success) {
+        console.error(`[onJointInput] ${name}: ❌ Command failed: ${result.data.message}`);
+      }
+    } catch (error) {
+      console.error(`[onJointInput] ${name}: Error sending command:`, error);
+    }
   },
 
   onJointCommitted: async (name, value) => {
@@ -367,6 +386,9 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       setStatus(`Error sending command: ${error.message}`, "danger-text");
     }
   },
+}, {
+  intervalMs: 100,  // 连续调节的时间间隔（毫秒），可根据需要调整
+  stepDeg: 1        // 每次步进的角度，可根据需要调整
 });
 
 const kinematicsLab = new KinematicsLab(kinematicsLabContainerEl, {

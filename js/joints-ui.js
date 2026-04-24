@@ -10,10 +10,14 @@ import {
 } from "./utils.js";
 
 export class JointsUI {
-  constructor(container, countElement, callbacks) {
+  constructor(container, countElement, callbacks, options = {}) {
     this.container = container;
     this.countElement = countElement;
     this.callbacks = callbacks;
+
+    // 可配置参数
+    this.intervalMs = options.intervalMs ?? 500; // 连续调节的时间间隔（毫秒），默认500ms
+    this.stepDeg = options.stepDeg ?? 1; // 每次步进的角度，默认1度
 
     this.jointMap = {};
     this.uiMap = {}; // 缓存DOM
@@ -202,9 +206,8 @@ export class JointsUI {
 
     /* ---------- slider events (Incremental Mode) ---------- */
     const rad = (d) => (d * Math.PI) / 180;
-    const STEP_DEG = 1; // 每次步进1度
     
-    // 核心动作：应用增量并累加
+    // 核心动作：应用增量并累加，直接实时下发
     const applyAndAccumulate = (deltaDeg) => {
       const ui = this.uiMap[name];
       if (!ui) {
@@ -233,8 +236,8 @@ export class JointsUI {
       // 更新 baseValue 以便下一次累加
       ui.baseValue = newValue;
       
-      // 发送指令 (实时回调)
-      console.log(`[applyAndAccumulate] ${name}: Calling onJointInput with value=${newValue.toFixed(6)}`);
+      // 直接实时下发指令（不再区分预览和提交）
+      console.log(`[applyAndAccumulate] ${name}: Directly sending to robot with value=${newValue.toFixed(6)}`);
       this.callbacks?.onJointInput?.(name, newValue);
     };
 
@@ -266,16 +269,16 @@ export class JointsUI {
        
        // 立即执行一次
        console.log(`[startMoving] ${name}: Executing first step`);
-       applyAndAccumulate(direction * STEP_DEG);
+       applyAndAccumulate(direction * this.stepDeg);
        
        // 记录方向
        ui.lastDir = direction;
 
-       // 连续执行 (每150ms一次)
-       console.log(`[startMoving] ${name}: Starting interval (150ms)`);
+       // 连续执行 (使用可配置的时间间隔)
+       console.log(`[startMoving] ${name}: Starting interval (${this.intervalMs}ms)`);
        ui.intervalId = setInterval(() => {
-         applyAndAccumulate(direction * STEP_DEG);
-       }, 150); 
+         applyAndAccumulate(direction * this.stepDeg);
+       }, this.intervalMs); 
     };
 
     // 停止移动
@@ -283,7 +286,7 @@ export class JointsUI {
       const ui = this.uiMap[name];
       if (!ui) return;
 
-      // 如果没有正在运行的定时器，说明已经停止过了，避免重复提交
+      // 如果没有正在运行的定时器，说明已经停止过了
       if (!ui.intervalId && ui.lastDir === 0) {
         console.log(`[stopMoving] ${name}: Already stopped, skipping`);
         return;
@@ -297,26 +300,14 @@ export class JointsUI {
         console.log(`[stopMoving] ${name}: Interval cleared`);
       }
       
-      // 保存最终值（在清除锁之前），确保不会被外部数据流干扰
-      const finalValue = ui.baseValue;
-      console.log(`[stopMoving] ${name}: Saved finalValue=${finalValue?.toFixed(6) || 'undefined'}`);
-      
       // 清除交互锁标记
       this.interactingJoints.delete(name);
       console.log(`[stopMoving] ${name}: Removed from interactingJoints`);
       
-      // 重置方向（必须在提交之前，防止重复启动）
+      // 重置方向
       ui.lastDir = 0;
-      
-      // 提交最终状态（使用保存的值，确保安全）
-      if (finalValue !== undefined && finalValue !== null) {
-        console.log(`[stopMoving] ${name}: Calling onJointCommitted with value=${finalValue.toFixed(6)} (${(finalValue * 180 / Math.PI).toFixed(2)}°)`);
-        this.callbacks?.onJointCommitted?.(name, finalValue);
-      } else {
-        console.error(`[stopMoving] ${name}: Invalid finalValue!`);
-      }
-      
-      // 滑块视觉上回中 (延迟一点，确保 change 事件处理完)
+            
+      // 滑块视觉上回中 (延迟一点，确保 input 事件处理完)
       setTimeout(() => {
         if (ui.slider) {
           ui.slider.value = "0";
