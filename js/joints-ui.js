@@ -236,6 +236,25 @@ export class JointsUI {
       // 更新 baseValue 以便下一次累加
       ui.baseValue = newValue;
       
+      // 更新进度条
+      const card = ui.slider.closest('.joint-card');
+      if (card) {
+        const joint = this.jointMap[name];
+        if (joint) {
+          const range = this.#getRange(joint);
+          const toDeg = (r) => (r * 180) / Math.PI;
+          const degValue = toDeg(newValue);
+          const degMin = toDeg(range.min);
+          const degMax = toDeg(range.max);
+          const pct = (degValue - degMin) / (degMax - degMin || 1);
+          
+          const fill = card.querySelector('.progress-fill');
+          if (fill) {
+            fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+          }
+        }
+      }
+      
       // 直接实时下发指令（不再区分预览和提交）
       console.log(`[applyAndAccumulate] ${name}: Directly sending to robot with value=${newValue.toFixed(6)}`);
       this.callbacks?.onJointInput?.(name, newValue);
