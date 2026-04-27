@@ -29,9 +29,13 @@ async function post(path, payload = {}) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+  
+  // 如果响应失败，优先使用后端返回的 message 字段，其次是 error 字段
   if (!response.ok) {
-    throw new Error(data?.error || `Gateway request failed: ${response.status}`);
+    const errorMessage = data?.message || data?.error || `Gateway request failed: ${response.status}`;
+    throw new Error(errorMessage);
   }
+  
   return { ok: true, mode: 'gateway', path, data };
 }
 

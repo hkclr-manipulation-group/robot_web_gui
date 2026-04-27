@@ -310,18 +310,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
   onJointInput: async (name, value) => {
     if (!kinematics || isSyncing) return;
 
-    withSyncGuard(() => {
-      // 更新kinematics中的关节值以反映用户的目标值
-      const currentMap = kinematics.getCurrentJointMap();
-      currentMap[name] = value;
-      kinematics.setJointMap(currentMap);
-      robot?.updateMatrixWorld(true);
-      refreshPoseReadout();
-      syncTaskUiFromRobot();
-      syncViewerFromRobot();
-    });
-
-    // 实时下发命令到机器人
+    // 实时下发命令到机器人（先发送命令，成功后再更新UI）
     try {
       const jointNames = Object.keys(kinematics.getCurrentJointMap());
       const jointValues = Object.values(kinematics.getCurrentJointMap());
@@ -331,13 +320,36 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       
       if (result.mode === "preview") {
         console.warn(`[onJointInput] ${name}: Preview mode - no gateway configured`);
+        // Preview 模式下仍然更新 UI
+        withSyncGuard(() => {
+          const currentMap = kinematics.getCurrentJointMap();
+          currentMap[name] = value;
+          kinematics.setJointMap(currentMap);
+          robot?.updateMatrixWorld(true);
+          refreshPoseReadout();
+          syncTaskUiFromRobot();
+          syncViewerFromRobot();
+        });
       } else if (result.data && result.data.success) {
         console.log(`[onJointInput] ${name}: ✅ Real-time command succeeded`);
+        // 成功后更新 UI
+        withSyncGuard(() => {
+          const currentMap = kinematics.getCurrentJointMap();
+          currentMap[name] = value;
+          kinematics.setJointMap(currentMap);
+          robot?.updateMatrixWorld(true);
+          refreshPoseReadout();
+          syncTaskUiFromRobot();
+          syncViewerFromRobot();
+        });
       } else if (result.data && !result.data.success) {
         console.error(`[onJointInput] ${name}: ❌ Command failed: ${result.data.message}`);
+        setStatus(`Failed to move joint: ${result.data.message}`, "danger-text");
+        // 失败时不更新 UI，保持原状
       }
     } catch (error) {
       console.error(`[onJointInput] ${name}: Error sending command:`, error);
+      setStatus(`Error moving joint: ${error.message}`, "danger-text");
     }
   },
 

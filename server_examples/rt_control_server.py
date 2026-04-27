@@ -281,8 +281,10 @@ def post_request(robot_id, payload, update_func):
     
     success, message = send_to_robot(robot_id, update_func)
     print("success:", success, "message:", message)
+    
+    # 如果操作失败，返回 ok=False 以便前端正确处理错误
     return {
-        "ok": True,
+        "ok": success,  # 修复：根据实际成功状态设置 ok
         "robot_id": robot_id,
         "echo": payload,
         "success": success,
