@@ -473,10 +473,28 @@ input[type="range"] {
   padding-right: 4px;
 }
 
+/* TaskSpace container - same spacing as joint-list */
+#taskSpaceContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding-top: var(--space);
+  padding-bottom: var(--space);
+  padding-right: 4px;
+}
+
 /* Make joint-list fill available vertical space and distribute height among cards */
 .tab-page.active .joint-list {
   flex: 1 1 auto;
   min-height: 0; /* important for flex children to allow shrinking */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Make taskSpaceContainer fill available vertical space too */
+.tab-page.active #taskSpaceContainer {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

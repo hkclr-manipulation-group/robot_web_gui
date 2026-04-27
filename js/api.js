@@ -71,8 +71,14 @@ export async function sendJointCommand(jointNames, jointValues) {
   return post('/move_joint', { joint_names: jointNames, joint_values: jointValues });
 }
 
-export async function sendPoseCommand(pose) {
-  return post('/move_pose', { pose });
+export async function sendPoseCommand(poseArray) {
+  // poseArray 应该是 [x, y, z, rx, ry, rz]
+  return post('/move_pose', { pose_values: poseArray });
+}
+
+export async function sendPoseIncrementalCommand(deltaPoseArray) {
+  // deltaPoseArray 应该是 [dx, dy, dz, drx, dry, drz] - 增量值
+  return post('/move_pose_incremental', { pose_delta_values: deltaPoseArray });
 }
 
 export async function sendStopCommand() {

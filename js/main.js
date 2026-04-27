@@ -12,6 +12,8 @@ import {
   pingGateway,
   sendHomeCommand,
   sendJointCommand,
+  sendPoseCommand,
+  sendPoseIncrementalCommand,
   sendStopCommand,
   sendZeroCommand,
   setActiveRobot,
@@ -29,6 +31,7 @@ import { TeachSystem } from "./teach.js";
 import { loadRobotFromUrdf } from "./urdf-loader-wrapper.js";
 import { formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
+import * as THREE from "three";
 
 /* -------------------------------------------------------------------------- */
 /* DOM                                                                         */
@@ -402,17 +405,63 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     taskUI.setPose(kinematics.getEndEffectorPose());
   },
 
-  onMove: (pose) => {
+  onMove: async (pose) => {
     if (!kinematics || isSyncing) return;
 
-    const ok = applyTaskPoseByIK(pose, {
-      syncJointUi: true,
-      syncTaskUi: true,
-      syncViewer: true,
-    });
+    // 🔧 选项1：通过 IK 求解并发送关节命令
+    // const ok = applyTaskPoseByIK(pose, {
+    //   syncJointUi: true,
+    //   syncTaskUi: true,
+    //   syncViewer: true,
+    // });
 
-    if (!ok) {
-      setStatus("IK solve failed for task move.", "warn");
+    // if (!ok) {
+    //   setStatus("IK solve failed for task move.", "warn");
+    // }
+    
+    // 🔧 选项2：直接发送任务空间命令到后端
+    
+    try {
+      console.log(`[TaskSpace onMove] Sending absolute pose command:`, pose);
+      const poseArray = [pose.x, pose.y, pose.z, pose.rx, pose.ry, pose.rz];
+      const result = await sendPoseCommand(poseArray);
+      
+      if (result.mode === "preview") {
+        console.warn(`[TaskSpace onMove] Preview mode - no gateway configured`);
+      } else if (result.data && result.data.success) {
+        console.log(`[TaskSpace onMove] ✅ Absolute pose command succeeded`);
+        setStatus("Task-space absolute command sent.", "ok");
+      } else if (result.data && !result.data.success) {
+        console.error(`[TaskSpace onMove] ❌ Command failed: ${result.data.message}`);
+        setStatus(`Failed to send absolute pose command. ${result.data.message}`, "danger-text");
+      }
+    } catch (error) {
+      console.error(`[TaskSpace onMove] Error sending command:`, error);
+      setStatus(`Error sending absolute pose command: ${error.message}`, "danger-text");
+    }
+    
+  },
+
+  onMoveIncremental: async (deltaPose) => {
+    if (!kinematics || isSyncing) return;
+
+    try {
+      console.log(`[TaskSpace onMoveIncremental] Sending incremental pose command:`, deltaPose);
+      const deltaPoseArray = [deltaPose.x, deltaPose.y, deltaPose.z, deltaPose.rx, deltaPose.ry, deltaPose.rz];
+      const result = await sendPoseIncrementalCommand(deltaPoseArray);
+      
+      if (result.mode === "preview") {
+        console.warn(`[TaskSpace onMoveIncremental] Preview mode - no gateway configured`);
+      } else if (result.data && result.data.success) {
+        console.log(`[TaskSpace onMoveIncremental] ✅ Incremental pose command succeeded`);
+        setStatus("Task-space incremental command sent.", "ok");
+      } else if (result.data && !result.data.success) {
+        console.error(`[TaskSpace onMoveIncremental] ❌ Command failed: ${result.data.message}`);
+        setStatus(`Failed to send incremental pose command. ${result.data.message}`, "danger-text");
+      }
+    } catch (error) {
+      console.error(`[TaskSpace onMoveIncremental] Error sending command:`, error);
+      setStatus(`Error sending incremental pose command: ${error.message}`, "danger-text");
     }
   },
 
@@ -424,6 +473,11 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onPlanPose: () => {
     document.getElementById("planCartesianBtn").click();
   },
+}, {
+  intervalMs: 1000,     // 连续调节的时间间隔（毫秒），可根据需要调整
+  stepTrans: 0.01,     // 平移每次步进的米数，可根据需要调整
+  stepRot: 1,          // 旋转每次步进的角度，可根据需要调整
+  controlMode: 0       // 默认控制模式：1=绝对位姿, 0=增量位姿
 });
 
 taskUI.build();
@@ -936,6 +990,19 @@ function connectStream(url) {
 
       if (eePose?.length >= 3) {
         updateEePoseCard(eePose.slice(0, 3));
+        
+        // eePose 包含完整的6维位姿信息，同步到 TaskSpaceUI
+        if (eePose.length >= 6 && kinematics) {
+          const pose = {
+            x: eePose[0],
+            y: eePose[1],
+            z: eePose[2],
+            rx: THREE.MathUtils.radToDeg(eePose[3]),
+            ry: THREE.MathUtils.radToDeg(eePose[4]),
+            rz: THREE.MathUtils.radToDeg(eePose[5])
+          };
+          taskUI.syncFromStreamData(pose);
+        }
       }
 
       if (jointPosition?.length) {

@@ -132,6 +132,7 @@ def send_to_robot(robot_id, update_func=None):
             time.sleep(udp_dt_send)
             print(f"rt_panel_command.send_timestamp: {rt_panel_command.send_timestamp}, setting_update_finished: {rt_planner_state.setting_update_finished}, need_setting_update: {rt_panel_command.need_setting_update}")
         print("rt_panel_command.joint_cmd:", rt_panel_command.joint_cmd)
+        print("rt_panel_command.task_cmd:", rt_panel_command.task_cmd)
         send_to_robot_lock.release()
     else:
         return False, "Wait for the previous action to finish."
@@ -142,7 +143,103 @@ def move_joint(robot_id, payload):
     if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
 
     if robot_id == "arm_v1":
-        rt_panel_command.joint_cmd[0] = payload.get("joint_values", rt_panel_command.joint_cmd[0])
+        joint_values = payload.get("joint_values", None)
+        if joint_values is not None and len(joint_values) > 0:
+            # 🔧 切换到关节控制模式
+            rt_panel_command.motion_type = 0  # 0 表示关节空间控制
+            rt_panel_command.joint_cmd[0] = joint_values
+            # 清空任务空间命令，避免冲突
+            rt_panel_command.task_cmd[0] = [0.0] * 6
+            print(f"[move_joint] Updated joint_cmd for {robot_id}: {joint_values}, motion_type set to 0")
+        else:
+            print(f"[move_joint] Warning: No valid joint_values received for {robot_id}")
+    else:
+        print(f"[move_joint] Warning: Unknown robot_id: {robot_id}")
+        return False, f"Unknown robot_id: {robot_id}"
+    
+    return True, "Success"
+
+def move_pose(robot_id, payload):
+    """处理任务空间位姿命令"""
+    global rt_panel_command
+    if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
+
+    # 🔧 支持 arm_v1
+    if robot_id == "arm_v1":
+        pose_values = payload.get("pose_values", None)
+        if pose_values is not None and len(pose_values) >= 6:
+            # 🔧 切换到任务空间控制模式
+            rt_panel_command.motion_type = 2  # 2 表示任务空间控制
+            
+            # 🔧 单位转换：前端发送的是 [x(m), y(m), z(m), rx(deg), ry(deg), rz(deg)]
+            # 底层期望的是 [x(m), y(m), z(m), rx(rad), ry(rad), rz(rad)]
+            import math
+            x, y, z, rx_deg, ry_deg, rz_deg = pose_values[:6]
+            rx_rad = math.radians(rx_deg)
+            ry_rad = math.radians(ry_deg)
+            rz_rad = math.radians(rz_deg)
+            
+            rt_panel_command.task_cmd[0] = [x, y, z, rx_rad, ry_rad, rz_rad]
+            # 注意：不清空 joint_cmd，因为底层可能需要当前关节位置作为参考
+            print(f"[move_pose] Updated task_cmd for {robot_id}: pos=[{x:.4f}, {y:.4f}, {z:.4f}], ori_deg=[{rx_deg:.2f}, {ry_deg:.2f}, {rz_deg:.2f}], ori_rad=[{rx_rad:.4f}, {ry_rad:.4f}, {rz_rad:.4f}], motion_type set to 2")
+        else:
+            print(f"[move_pose] Warning: Invalid pose_values received for {robot_id}")
+            return False, "Invalid pose data"
+    else:
+        print(f"[move_pose] Warning: Unknown robot_id: {robot_id}")
+        return False, f"Unknown robot_id: {robot_id}"
+    
+    return True, "Success"
+
+def move_pose_incremental(robot_id, payload):
+    """处理任务空间增量位姿命令"""
+    global rt_panel_command
+    if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
+
+    # 🔧 支持 arm_v1
+    if robot_id == "arm_v1":
+        pose_delta_values = payload.get("pose_delta_values", None)
+        if pose_delta_values is not None and len(pose_delta_values) >= 6:
+            # 🔧 切换到任务空间控制模式
+            rt_panel_command.motion_type = 2  # 2 表示任务空间控制
+            
+            # 🔧 单位转换：前端发送的是 [dx(m), dy(m), dz(m), drx(deg), dry(deg), drz(deg)]
+            # 底层期望的是 [x(m), y(m), z(m), rx(rad), ry(rad), rz(rad)]
+            # 需要将增量累加到当前位姿
+            import math
+            dx, dy, dz, drx_deg, dry_deg, drz_deg = pose_delta_values[:6]
+            
+            # 获取当前位姿
+            current_task_cmd = rt_panel_command.task_cmd[0]
+            current_x, current_y, current_z = current_task_cmd[0], current_task_cmd[1], current_task_cmd[2]
+            current_rx_rad, current_ry_rad, current_rz_rad = current_task_cmd[3], current_task_cmd[4], current_task_cmd[5]
+            
+            # 计算新位姿（平移直接累加，旋转需要转换）
+            new_x = current_x + dx
+            new_y = current_y + dy
+            new_z = current_z + dz
+            
+            # 旋转增量：将角度增量转换为弧度并累加
+            drx_rad = math.radians(drx_deg)
+            dry_rad = math.radians(dry_deg)
+            drz_rad = math.radians(drz_deg)
+            
+            new_rx_rad = current_rx_rad + drx_rad
+            new_ry_rad = current_ry_rad + dry_rad
+            new_rz_rad = current_rz_rad + drz_rad
+            
+            # 更新任务命令
+            rt_panel_command.task_cmd[0] = [new_x, new_y, new_z, new_rx_rad, new_ry_rad, new_rz_rad]
+            
+            print(f"[move_pose_incremental] Updated task_cmd for {robot_id}: delta=[{dx:.4f}, {dy:.4f}, {dz:.4f}, {drx_deg:.2f}°, {dry_deg:.2f}°, {drz_deg:.2f}°]")
+            print(f"[move_pose_incremental] New absolute pose: pos=[{new_x:.4f}, {new_y:.4f}, {new_z:.4f}], ori_rad=[{new_rx_rad:.4f}, {new_ry_rad:.4f}, {new_rz_rad:.4f}]")
+        else:
+            print(f"[move_pose_incremental] Warning: Invalid pose_delta_values received for {robot_id}")
+            return False, "Invalid pose delta data"
+    else:
+        print(f"[move_pose_incremental] Warning: Unknown robot_id: {robot_id}")
+        return False, f"Unknown robot_id: {robot_id}"
+    
     return True, "Success"
         
 def enable_teach(robot_id, payload):
@@ -241,6 +338,12 @@ class Handler(BaseHTTPRequestHandler):
             result = post_request(robot_id, {"path": self.path, "enable": True}, func_ptr)
         elif self.path == "/move_joint" or self.path == "/home" or self.path == "/zero":
             func_ptr = lambda a: move_joint(a, {"path": self.path, **data})
+            result = post_request(robot_id, {"path": self.path, **data}, func_ptr)
+        elif self.path == "/move_pose":
+            func_ptr = lambda a: move_pose(a, {"path": self.path, **data})
+            result = post_request(robot_id, {"path": self.path, **data}, func_ptr)
+        elif self.path == "/move_pose_incremental":
+            func_ptr = lambda a: move_pose_incremental(a, {"path": self.path, **data})
             result = post_request(robot_id, {"path": self.path, **data}, func_ptr)
         elif self.path == "/teach":
             func_ptr = lambda a: enable_teach(a, {"path": self.path, **data})
