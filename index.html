@@ -61,6 +61,21 @@
       </div>
       <div id="viewer"></div>
       <img src="./_exportedimage/_exportedimage/image 225.svg" alt="badge" class="viewer-badge"/>
+
+      <div class="teach-control-bar" aria-label="Teach Controls">
+        <button id="teachRecordBtn" class="teach-action-btn teach-record is-enabled" type="button" aria-label="Record">
+          <img class="teach-asset teach-asset--on" src="./_exportedimage/_exportedimage/Group%20205.svg" width="64" height="64" alt="" />
+          <img class="teach-asset teach-asset--off" src="./_exportedimage/_exportedimage/Group%20201.svg" width="64" height="64" alt="" />
+        </button>
+        <button id="teachPlayBtn" class="teach-action-btn teach-play is-disabled" type="button" aria-label="Play" disabled>
+          <img class="teach-asset teach-asset--on" src="./_exportedimage/_exportedimage/Group%20204.svg" width="64" height="64" alt="" />
+          <img class="teach-asset teach-asset--off" src="./_exportedimage/_exportedimage/Group%20207.svg" width="64" height="64" alt="" />
+        </button>
+        <button id="teachStopBtn" class="teach-action-btn teach-stop is-disabled" type="button" aria-label="Stop" disabled>
+          <img class="teach-asset teach-asset--on" src="./_exportedimage/_exportedimage/Group%20203.svg" width="64" height="64" alt="" />
+          <img class="teach-asset teach-asset--off" src="./_exportedimage/_exportedimage/Group%20206.svg" width="64" height="64" alt="" />
+        </button>
+      </div>
       
       <!-- End Effector Pose Card -->
       <div class="ee-pose-card">
@@ -164,10 +179,7 @@
           <button id="clearPathBtn">Clear Path</button>
         </div> -->
           <!-- <pre id="pathPreview" class="path-preview">[]</pre> -->
-          <div class="button-grid">
-            <button id="startTeachBtn">Start Teach</button>
-            <button id="stopTeachBtn">Stop Teach</button>
-          </div>
+          <div id="jointContainerTeach" class="joint-list"></div>
         </section>
 
         <section class="card tab-page" data-page="lab">

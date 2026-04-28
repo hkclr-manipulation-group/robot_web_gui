@@ -52,6 +52,10 @@ const jointCountEl = document.getElementById("jointCount");
 const jointContainerEl = document.getElementById("jointContainer");
 const taskSpaceContainerEl = document.getElementById("taskSpaceContainer");
 const kinematicsLabContainerEl = document.getElementById("kinematicsLabPage");
+const jointContainerTeachEl = document.getElementById("jointContainerTeach");
+const teachRecordBtnEl = document.getElementById("teachRecordBtn");
+const teachPlayBtnEl = document.getElementById("teachPlayBtn");
+const teachStopBtnEl = document.getElementById("teachStopBtn");
 
 const eePoseEl = document.getElementById("eePose");
 const baseLinkEl = document.getElementById("baseLink");
@@ -76,6 +80,8 @@ let ikBusy = false;    // 防止拖动时重复进入 IK
 
 let lastGoalMap = null;
 let lastGoalPose = null;
+let teachUiState = "idle"; // idle | recording | ready | playing
+let teachRecordTimer = null;
 
 const RETRY_DELAY = 3000;
 let robotStream = null; // EventSource for streaming robot data from gateway
@@ -103,10 +109,12 @@ function withSyncGuard(fn) {
 }
 
 function getPlanSteps() {
+  if (!planStepsEl) return Math.max(2, PATH_DEFAULTS.steps);
   return Math.max(2, parseInt(planStepsEl.value || PATH_DEFAULTS.steps, 10));
 }
 
 function getPlayDelay() {
+  if (!playDelayEl) return Math.max(10, PATH_DEFAULTS.delayMs);
   return Math.max(10, parseInt(playDelayEl.value || PATH_DEFAULTS.delayMs, 10));
 }
 
@@ -225,6 +233,29 @@ function updateTeachUi() {
     STORAGE_KEYS.lastTrajectory,
     JSON.stringify(teachSystem.getPath())
   );
+}
+
+function setTeachButtonState(buttonEl, enabled) {
+  if (!buttonEl) return;
+  buttonEl.disabled = !enabled;
+  buttonEl.classList.toggle("is-enabled", enabled);
+  buttonEl.classList.toggle("is-disabled", !enabled);
+}
+
+function refreshTeachControls() {
+  const hasRecording = teachSystem.count > 0;
+  const canRecord = teachUiState === "idle" || teachUiState === "ready";
+  const canPlay = teachUiState === "ready" && hasRecording;
+  const canStop = teachUiState === "recording" || teachUiState === "playing";
+
+  setTeachButtonState(teachRecordBtnEl, canRecord);
+  setTeachButtonState(teachPlayBtnEl, canPlay);
+  setTeachButtonState(teachStopBtnEl, canStop);
+}
+
+function syncTeachJointMirror() {
+  if (!jointContainerTeachEl || !jointContainerEl) return;
+  jointContainerTeachEl.innerHTML = jointContainerEl.innerHTML;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -527,6 +558,7 @@ async function loadCurrentRobot(path) {
     kinematicsLab.setRobotContext(kinematics);
 
     jointsUI.build(robot);
+    syncTeachJointMirror();
 
     syncMeta();
 
@@ -603,10 +635,14 @@ async function executeTrajectory(trajectory) {
   if (!kinematics || !trajectory?.length) return;
 
   isBusy = true;
+  let stoppedEarly = false;
   setStatus(`Playing ${trajectory.length} waypoints...`, "warn");
 
   for (let i = 0; i < trajectory.length; i++) {
-    if (!isBusy) break;
+    if (!isBusy) {
+      stoppedEarly = true;
+      break;
+    }
 
     const map = trajectory[i];
 
@@ -621,7 +657,12 @@ async function executeTrajectory(trajectory) {
   }
 
   isBusy = false;
+  if (stoppedEarly) {
+    setStatus("Path playback stopped.", "warn");
+    return false;
+  }
   setStatus("Path playback completed.", "ok");
+  return true;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -652,12 +693,12 @@ function bindButtons() {
   //   taskUI.setPose(kinematics.getEndEffectorPose());
   // };
 
-  document.getElementById("captureJointGoalBtn").onclick = () => {
-    if (!kinematics) return;
+  // document.getElementById("captureJointGoalBtn").onclick = () => {
+  //   if (!kinematics) return;
 
-    lastGoalMap = kinematics.getCurrentJointMap();
-    setStatus("Joint-space goal snapshot captured.", "ok");
-  };
+  //   lastGoalMap = kinematics.getCurrentJointMap();
+  //   setStatus("Joint-space goal snapshot captured.", "ok");
+  // };
 
   // document.getElementById("capturePoseGoalBtn").onclick = () => {
   //   if (!kinematics) return;
@@ -851,30 +892,118 @@ function bindButtons() {
     }
   };
 
-  document.getElementById("startTeachBtn").onclick = () => enableTeachMode(true);
-  document.getElementById("stopTeachBtn").onclick = () => enableTeachMode(false);
-
   async function enableTeachMode(enable) {
-    try {
-      const result = await enableTeachModeApi(enable);
+    const result = await enableTeachModeApi(enable);
+    if (result.mode === "preview") return true;
+    return !!result.data?.success;
+  }
 
-      if (result.mode === "preview") {
-        setStatus("Preview mode active. No gateway configured.", "warn");
-      }else if (enable && result.data.success) {
-        setStatus("Teach mode enabled.", "ok");
-      }else if (enable && !result.data.success) {
-        setStatus(`Failed to enable teach mode. ${result.data.message}`, "danger-text");
-      }else if (!enable && result.data.success) {
-        setStatus("Teach mode disabled.", "ok");
-      }else if (!enable && !result.data.success) {
-        setStatus(`Failed to disable teach mode. ${result.data.message}`, "danger-text");
+  function startTeachSampling() {
+    if (teachRecordTimer) {
+      clearInterval(teachRecordTimer);
+      teachRecordTimer = null;
+    }
+
+    teachRecordTimer = setInterval(() => {
+      if (!kinematics || teachUiState !== "recording") return;
+      teachSystem.record(kinematics.getCurrentJointMap());
+      syncTeachJointMirror();
+      refreshTeachControls();
+    }, 180);
+  }
+
+  function stopTeachSampling() {
+    if (!teachRecordTimer) return;
+    clearInterval(teachRecordTimer);
+    teachRecordTimer = null;
+  }
+
+  async function onTeachRecordClick() {
+    if (teachUiState === "recording" || teachUiState === "playing") return;
+    if (!kinematics) return;
+
+    teachSystem.clear();
+    teachSystem.record(kinematics.getCurrentJointMap());
+    teachUiState = "recording";
+    refreshTeachControls();
+    setStatus("Teach recording started.", "warn");
+
+    try {
+      const ok = await enableTeachMode(true);
+      if (!ok) {
+        teachUiState = "idle";
+        refreshTeachControls();
+        setStatus("Failed to enable teach mode.", "danger-text");
+        return;
       }
 
+      startTeachSampling();
     } catch (error) {
-      updateConnectionUi("danger");
-      setStatus(error.message || "Connect failed.", "danger-text");
+      teachUiState = "idle";
+      refreshTeachControls();
+      setStatus(error.message || "Failed to enable teach mode.", "danger-text");
     }
   }
+
+  async function onTeachPlayClick() {
+    if (teachUiState === "recording" || teachUiState === "playing") return;
+    if (!teachSystem.count) return;
+
+    teachUiState = "playing";
+    refreshTeachControls();
+
+    try {
+      const completed = await executeTrajectory(teachSystem.getPath());
+      teachUiState = teachSystem.count ? "ready" : "idle";
+      refreshTeachControls();
+
+      if (!completed) {
+        setStatus("Teach playback stopped.", "warn");
+      }
+    } catch (error) {
+      teachUiState = teachSystem.count ? "ready" : "idle";
+      refreshTeachControls();
+      setStatus(error.message || "Teach playback failed.", "danger-text");
+    }
+  }
+
+  async function onTeachStopClick() {
+    if (teachUiState !== "recording" && teachUiState !== "playing") return;
+
+    if (teachUiState === "recording") {
+      stopTeachSampling();
+      try {
+        const ok = await enableTeachMode(false);
+        if (!ok) {
+          setStatus("Failed to disable teach mode.", "danger-text");
+        }
+      } catch (error) {
+        setStatus(error.message || "Failed to disable teach mode.", "danger-text");
+      }
+
+      teachUiState = teachSystem.count ? "ready" : "idle";
+      setStatus(
+        teachSystem.count ? `Teach recording stopped. ${teachSystem.count} poses captured.` : "Teach recording stopped.",
+        teachSystem.count ? "ok" : "warn"
+      );
+      refreshTeachControls();
+      return;
+    }
+
+    isBusy = false;
+    try {
+      await sendStopCommand();
+    } catch (error) {
+      console.warn("Failed to send stop command:", error);
+    }
+    teachUiState = teachSystem.count ? "ready" : "idle";
+    setStatus("Teach playback stop requested.", "warn");
+    refreshTeachControls();
+  }
+
+  if (teachRecordBtnEl) teachRecordBtnEl.onclick = onTeachRecordClick;
+  if (teachPlayBtnEl) teachPlayBtnEl.onclick = onTeachPlayClick;
+  if (teachStopBtnEl) teachStopBtnEl.onclick = onTeachStopClick;
 
    // Robot Manager floating panel toggle
   const mgrBtn = document.getElementById("openRobotManagerBtn");
@@ -941,8 +1070,20 @@ function bindCardTabs() {
   const init = () => {
     const tabs = document.querySelectorAll(".tab-btn");
     const pages = document.querySelectorAll(".tab-page");
+    const viewerPanelEl = document.querySelector(".viewer-panel");
 
     if (!tabs.length) return;
+
+    const syncTeachVisibility = (pageId) => {
+      const teachActive = pageId === "planning";
+      viewerPanelEl?.classList.toggle("teach-active", teachActive);
+      if (teachActive) {
+        syncTeachJointMirror();
+      }
+    };
+
+    const initialActiveTab = document.querySelector(".tab-btn.active");
+    syncTeachVisibility(initialActiveTab?.dataset.page || "");
 
     tabs.forEach((tab) => {
       tab.addEventListener("click", (e) => {
@@ -961,6 +1102,8 @@ function bindCardTabs() {
         if (activePage) {
           activePage.classList.add("active");
         }
+
+        syncTeachVisibility(pageId);
       });
     });
   };
@@ -1019,6 +1162,7 @@ function connectStream(url) {
 
       if (jointPosition?.length) {
         jointsUI.syncFromStreamData(jointPosition);
+        syncTeachJointMirror();
       }
     } catch (error) {
       console.error("Failed to parse stream payload:", error, event.data);
@@ -1078,6 +1222,7 @@ function updateEePoseCard(position) {
 
   bindButtons();
   bindCardTabs();
+  refreshTeachControls();
 
   // if (savedTraj) {
   //   try {

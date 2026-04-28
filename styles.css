@@ -232,7 +232,7 @@ input[type="range"] {
   justify-content: center;
   align-items: center;
   gap: 18px;
-  padding: 8px 16px;
+  padding: 12px 18px;
   width: min(78%, 920px);
   margin: 0 auto;
   background-image: url('./_exportedimage/_exportedimage/Rectangle 260.svg'); 
@@ -241,7 +241,7 @@ input[type="range"] {
   background-position: center;
   border-radius: 12px;
   position: absolute;
-  bottom: 16px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -255,7 +255,7 @@ input[type="range"] {
   justify-content: center;
   gap: 6px;
   padding: 10px 20px;
-  min-height: 60px;
+  min-height: 68px;
   min-width: 92px;
   border: none;
   background: transparent;
@@ -267,6 +267,115 @@ input[type="range"] {
   border-radius: 8px;
   position: relative;
   /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); */
+}
+
+.teach-control-bar {
+  position: absolute;
+  left: 55%;
+  transform: translateX(-50%) translateY(4px);
+  bottom: 135px;
+  z-index: 12;
+  width: min(26%, 307px);
+  box-sizing: border-box;
+  min-height: 58px;
+  padding: 6px 30px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+  background-image: url('./_exportedimage/_exportedimage/Rectangle 274.svg'); 
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+  box-shadow: 4px 6px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.viewer-panel.teach-active .teach-control-bar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.teach-action-btn {
+  flex: 0 0 auto;
+  width: max(40px, min(52px, 30%));
+  aspect-ratio: 1;
+  height: auto;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: #d9d9d9;
+  box-shadow:
+    0 3px 1px rgba(255, 255, 255, 0.85) inset,
+    0 10px 18px rgba(20, 28, 45, 0.1),
+    0 2px 4px rgba(20, 28, 45, 0.04);
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease, background-color 150ms ease, opacity 150ms ease;
+}
+
+.teach-action-btn:active {
+  transform: translateY(2px) scale(0.98);
+  box-shadow:
+    0 2px 2px rgba(255, 255, 255, 0.55) inset,
+    0 6px 14px rgba(20, 28, 45, 0.1),
+    0 1px 2px rgba(20, 28, 45, 0.06) inset;
+}
+
+.teach-action-btn.is-disabled,
+.teach-action-btn:disabled {
+  cursor: not-allowed;
+  background: #d0d0d0;
+  box-shadow:
+    0 2px 1px rgba(255, 255, 255, 0.5) inset,
+    0 6px 12px rgba(20, 28, 45, 0.08),
+    0 1px 2px rgba(20, 28, 45, 0.04);
+}
+
+.teach-action-btn.is-disabled:active,
+.teach-action-btn:disabled:active {
+  transform: none;
+}
+
+/* 设计稿 64×64 图铺满圆钮；开/关两图叠放，用 is-enabled 切换 */
+.teach-asset {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 150ms ease;
+}
+
+.teach-action-btn.is-enabled .teach-asset--on {
+  opacity: 1;
+  z-index: 1;
+}
+
+.teach-action-btn.is-enabled .teach-asset--off {
+  opacity: 0;
+}
+
+.teach-action-btn.is-disabled .teach-asset--on,
+.teach-action-btn:disabled .teach-asset--on {
+  opacity: 0;
+}
+
+.teach-action-btn.is-disabled .teach-asset--off,
+.teach-action-btn:disabled .teach-asset--off {
+  opacity: 1;
+  z-index: 1;
 }
 
 /* .viewer-tabs .tab-btn:hover {
@@ -613,6 +722,15 @@ input[type="range"] {
   border-radius: 16px;
 }
 
+/* Teach 页关节列表（镜像 UI）：滑轨使用设计稿 Group 185_2.svg */
+#jointContainerTeach .slider-large::-webkit-slider-runnable-track,
+#jointContainerTeach .slider-large::-moz-range-track {
+  height: 39px;
+  transform: translateY(-16px);
+  background: transparent url("./_exportedimage/_exportedimage/Group%20185_2.svg") no-repeat center / 100% 100%;
+  border-radius: 16px;
+}
+
 .slider-large::-webkit-slider-thumb,
 .slider-large::-moz-range-thumb {
   -webkit-appearance: none;
@@ -955,6 +1073,13 @@ input[type="range"] {
   .viewer-tabs .tab-btn {
     min-width: 70px;
     padding: 8px 10px;
+  }
+
+  .teach-control-bar {
+    /* 原约 (100% - 24px) 的 1/3 */
+    width: min(calc((100% - 24px) / 3), 280px);
+    bottom: 108px;
+    padding: 6px 10px;
   }
 
   .tab-label {
