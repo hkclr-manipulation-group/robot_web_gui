@@ -18,7 +18,6 @@ import {
   sendZeroCommand,
   setActiveRobot,
   setGatewayUrl,
-  enableTeachModeApi,
 } from "./api.js";
 
 import { JointsUI } from "./joints-ui.js";
@@ -27,13 +26,13 @@ import { RobotKinematics } from "./kinematics.js";
 import { planCartesianTrajectory, planJointTrajectory } from "./planner.js";
 import { saveTrajectoryToFile, loadTrajectoryFromFile } from "./storage.js";
 import { TaskSpaceUI } from "./taskspace-ui.js";
-import { TeachSystem } from "./teach.js";
+import { createTeachModule } from "./teach.js";
 import { loadRobotFromUrdf } from "./urdf-loader-wrapper.js";
 import { formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import * as THREE from "three";
 
-/* -------------------------------------------------------------------------- */
+/* ----------6---------------------------------------------------------------- */
 /* DOM                                                                         */
 /* -------------------------------------------------------------------------- */
 
@@ -80,14 +79,10 @@ let ikBusy = false;    // 防止拖动时重复进入 IK
 
 let lastGoalMap = null;
 let lastGoalPose = null;
-let teachUiState = "idle"; // idle | recording | ready | playing
-let teachRecordTimer = null;
 
 const RETRY_DELAY = 3000;
 let robotStream = null; // EventSource for streaming robot data from gateway
 let robotStreamRetryTimer = null;
-
-const teachSystem = new TeachSystem();
 
 /* -------------------------------------------------------------------------- */
 /* Utilities                                                                   */
@@ -224,38 +219,6 @@ function syncAllFromRobot() {
   refreshPoseReadout();
   syncTaskUiFromRobot();
   syncViewerFromRobot();
-}
-
-function updateTeachUi() {
-  teachCountEl.textContent = `${teachSystem.count} poses`;
-  pathPreviewEl.textContent = JSON.stringify(teachSystem.getPath(), null, 2);
-  localStorage.setItem(
-    STORAGE_KEYS.lastTrajectory,
-    JSON.stringify(teachSystem.getPath())
-  );
-}
-
-function setTeachButtonState(buttonEl, enabled) {
-  if (!buttonEl) return;
-  buttonEl.disabled = !enabled;
-  buttonEl.classList.toggle("is-enabled", enabled);
-  buttonEl.classList.toggle("is-disabled", !enabled);
-}
-
-function refreshTeachControls() {
-  const hasRecording = teachSystem.count > 0;
-  const canRecord = teachUiState === "idle" || teachUiState === "ready";
-  const canPlay = teachUiState === "ready" && hasRecording;
-  const canStop = teachUiState === "recording" || teachUiState === "playing";
-
-  setTeachButtonState(teachRecordBtnEl, canRecord);
-  setTeachButtonState(teachPlayBtnEl, canPlay);
-  setTeachButtonState(teachStopBtnEl, canStop);
-}
-
-function syncTeachJointMirror() {
-  if (!jointContainerTeachEl || !jointContainerEl) return;
-  jointContainerTeachEl.innerHTML = jointContainerEl.innerHTML;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -558,7 +521,7 @@ async function loadCurrentRobot(path) {
     kinematicsLab.setRobotContext(kinematics);
 
     jointsUI.build(robot);
-    syncTeachJointMirror();
+    teach.syncTeachJointMirror();
 
     syncMeta();
 
@@ -665,6 +628,26 @@ async function executeTrajectory(trajectory) {
   return true;
 }
 
+const teach = createTeachModule({
+  elements: {
+    teachCountEl,
+    pathPreviewEl,
+    jointContainerTeachEl,
+    jointContainerEl,
+    teachRecordBtnEl,
+    teachPlayBtnEl,
+    teachStopBtnEl,
+  },
+  getKinematics: () => kinematics,
+  setStatus,
+  executeTrajectory,
+  sendStopCommand,
+  onClearBusy: () => {
+    isBusy = false;
+  },
+});
+const teachSystem = teach.system;
+
 /* -------------------------------------------------------------------------- */
 /* Buttons                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -762,14 +745,14 @@ function bindButtons() {
   //   if (!kinematics) return;
 
   //   teachSystem.record(kinematics.getCurrentJointMap());
-  //   updateTeachUi();
+  //   teach.updateTeachUi();
 
   //   setStatus("Current pose recorded.", "ok");
   // };
 
   // document.getElementById("clearPathBtn").onclick = () => {
   //   teachSystem.clear();
-  //   updateTeachUi();
+  //   teach.updateTeachUi();
   //   setStatus("Path cleared.", "ok");
   // };
 
@@ -798,7 +781,7 @@ function bindButtons() {
   //   const trajectory = planJointTrajectory(current, lastGoalMap, getPlanSteps());
 
   //   teachSystem.replaceAll(trajectory);
-  //   updateTeachUi();
+  //   teach.updateTeachUi();
 
   //   setStatus("Joint trajectory generated.", "ok");
   // };
@@ -817,7 +800,7 @@ function bindButtons() {
   //   );
 
   //   teachSystem.replaceAll(trajectory);
-  //   updateTeachUi();
+  //   teach.updateTeachUi();
 
   //   setStatus("Cartesian trajectory generated via IK.", "ok");
   // };
@@ -829,7 +812,7 @@ function bindButtons() {
   //   const trajectory = await loadTrajectoryFromFile(file);
 
   //   teachSystem.replaceAll(trajectory);
-  //   updateTeachUi();
+  //   teach.updateTeachUi();
 
   //   setStatus("Trajectory loaded.", "ok");
   //   event.target.value = "";
@@ -892,118 +875,7 @@ function bindButtons() {
     }
   };
 
-  async function enableTeachMode(enable) {
-    const result = await enableTeachModeApi(enable);
-    if (result.mode === "preview") return true;
-    return !!result.data?.success;
-  }
-
-  function startTeachSampling() {
-    if (teachRecordTimer) {
-      clearInterval(teachRecordTimer);
-      teachRecordTimer = null;
-    }
-
-    teachRecordTimer = setInterval(() => {
-      if (!kinematics || teachUiState !== "recording") return;
-      teachSystem.record(kinematics.getCurrentJointMap());
-      syncTeachJointMirror();
-      refreshTeachControls();
-    }, 180);
-  }
-
-  function stopTeachSampling() {
-    if (!teachRecordTimer) return;
-    clearInterval(teachRecordTimer);
-    teachRecordTimer = null;
-  }
-
-  async function onTeachRecordClick() {
-    if (teachUiState === "recording" || teachUiState === "playing") return;
-    if (!kinematics) return;
-
-    teachSystem.clear();
-    teachSystem.record(kinematics.getCurrentJointMap());
-    teachUiState = "recording";
-    refreshTeachControls();
-    setStatus("Teach recording started.", "warn");
-
-    try {
-      const ok = await enableTeachMode(true);
-      if (!ok) {
-        teachUiState = "idle";
-        refreshTeachControls();
-        setStatus("Failed to enable teach mode.", "danger-text");
-        return;
-      }
-
-      startTeachSampling();
-    } catch (error) {
-      teachUiState = "idle";
-      refreshTeachControls();
-      setStatus(error.message || "Failed to enable teach mode.", "danger-text");
-    }
-  }
-
-  async function onTeachPlayClick() {
-    if (teachUiState === "recording" || teachUiState === "playing") return;
-    if (!teachSystem.count) return;
-
-    teachUiState = "playing";
-    refreshTeachControls();
-
-    try {
-      const completed = await executeTrajectory(teachSystem.getPath());
-      teachUiState = teachSystem.count ? "ready" : "idle";
-      refreshTeachControls();
-
-      if (!completed) {
-        setStatus("Teach playback stopped.", "warn");
-      }
-    } catch (error) {
-      teachUiState = teachSystem.count ? "ready" : "idle";
-      refreshTeachControls();
-      setStatus(error.message || "Teach playback failed.", "danger-text");
-    }
-  }
-
-  async function onTeachStopClick() {
-    if (teachUiState !== "recording" && teachUiState !== "playing") return;
-
-    if (teachUiState === "recording") {
-      stopTeachSampling();
-      try {
-        const ok = await enableTeachMode(false);
-        if (!ok) {
-          setStatus("Failed to disable teach mode.", "danger-text");
-        }
-      } catch (error) {
-        setStatus(error.message || "Failed to disable teach mode.", "danger-text");
-      }
-
-      teachUiState = teachSystem.count ? "ready" : "idle";
-      setStatus(
-        teachSystem.count ? `Teach recording stopped. ${teachSystem.count} poses captured.` : "Teach recording stopped.",
-        teachSystem.count ? "ok" : "warn"
-      );
-      refreshTeachControls();
-      return;
-    }
-
-    isBusy = false;
-    try {
-      await sendStopCommand();
-    } catch (error) {
-      console.warn("Failed to send stop command:", error);
-    }
-    teachUiState = teachSystem.count ? "ready" : "idle";
-    setStatus("Teach playback stop requested.", "warn");
-    refreshTeachControls();
-  }
-
-  if (teachRecordBtnEl) teachRecordBtnEl.onclick = onTeachRecordClick;
-  if (teachPlayBtnEl) teachPlayBtnEl.onclick = onTeachPlayClick;
-  if (teachStopBtnEl) teachStopBtnEl.onclick = onTeachStopClick;
+  teach.bindTeachButtons();
 
    // Robot Manager floating panel toggle
   const mgrBtn = document.getElementById("openRobotManagerBtn");
@@ -1078,7 +950,7 @@ function bindCardTabs() {
       const teachActive = pageId === "planning";
       viewerPanelEl?.classList.toggle("teach-active", teachActive);
       if (teachActive) {
-        syncTeachJointMirror();
+        teach.syncTeachJointMirror();
       }
     };
 
@@ -1162,7 +1034,7 @@ function connectStream(url) {
 
       if (jointPosition?.length) {
         jointsUI.syncFromStreamData(jointPosition);
-        syncTeachJointMirror();
+        teach.syncTeachJointMirror();
       }
     } catch (error) {
       console.error("Failed to parse stream payload:", error, event.data);
@@ -1222,18 +1094,18 @@ function updateEePoseCard(position) {
 
   bindButtons();
   bindCardTabs();
-  refreshTeachControls();
+  teach.refreshTeachControls();
 
   // if (savedTraj) {
   //   try {
   //     teachSystem.replaceAll(JSON.parse(savedTraj));
-  //     updateTeachUi();
+  //     teach.updateTeachUi();
   //   } catch {
   //     teachSystem.clear();
-  //     updateTeachUi();
+  //     teach.updateTeachUi();
   //   }
   // } else {
-  //   updateTeachUi();
+  //   teach.updateTeachUi();
   // }
 
   connectStream(savedGateway);
