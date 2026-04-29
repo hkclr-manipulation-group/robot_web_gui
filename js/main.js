@@ -27,7 +27,12 @@ import { planCartesianTrajectory, planJointTrajectory } from "./planner.js";
 import { saveTrajectoryToFile, loadTrajectoryFromFile } from "./storage.js";
 import { TaskSpaceUI } from "./taskspace-ui.js";
 import { createTeachModule } from "./teach.js";
-import { loadRobotFromUrdf } from "./urdf-loader-wrapper.js";
+import {
+  applyGhostVisualStyle,
+  applyHardwareContrastStyle,
+  cloneMaterialsPerMesh,
+  loadRobotFromUrdf,
+} from "./urdf-loader-wrapper.js";
 import { formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import * as THREE from "three";
@@ -70,7 +75,10 @@ const playDelayEl = document.getElementById("playDelay");
 /* State                                                                       */
 /* -------------------------------------------------------------------------- */
 
-let robot = null;
+/** URDF tuned from commands / IK (lighter “ghost”). */
+let robotGhost = null;
+/** Duplicate URDF driven by streamed joint telemetry (full materials). */
+let robotHardware = null;
 let kinematics = null;
 
 let isBusy = false;
@@ -115,6 +123,62 @@ function getPlayDelay() {
 
 function hasRobot() {
   return !!kinematics;
+}
+
+/** Apply numeric joint vector using the same naming order as kinematics (parallel URDF clones). */
+function applyJointVectorToUrdfRobot(urdfRobot, jointVector) {
+  if (!urdfRobot || !kinematics || !jointVector?.length) return;
+  const names = kinematics.getJointNames();
+  for (let i = 0; i < names.length; i++) {
+    const joint = urdfRobot.joints?.[names[i]];
+    if (!joint) continue;
+    const v = jointVector[i];
+    if (!Number.isFinite(v)) continue;
+    if (typeof joint.setJointValue === "function") joint.setJointValue(v);
+    else joint.angle = v;
+  }
+  urdfRobot.updateMatrixWorld(true);
+}
+
+/** rad：仿真指令与遥测对齐后仿真臂淡出 */
+const JOINT_ALIGNMENT_TOL_RAD = 0.04;
+
+function telemetryMatchesGhostCommand(telemJoint) {
+  if (!kinematics || !telemJoint?.length) return false;
+  const n = kinematics.getJointNames().length;
+  const t = telemJoint.slice(0, n);
+  if (t.length < n) return false;
+
+  const cmd = kinematics.getCurrentJointVector();
+  let maxD = 0;
+  for (let i = 0; i < n; i++) {
+    const a = cmd[i];
+    const b = t[i];
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    maxD = Math.max(maxD, Math.abs(a - b));
+  }
+  return maxD <= JOINT_ALIGNMENT_TOL_RAD;
+}
+
+/** 有新的关节指令或 IK 轨迹时调用：在真实硬件与指令未对齐前先显示仿真臂 */
+function noteGhostShowsCommandAheadOfTelemetry() {
+  if (robotHardware?.visible) {
+    viewer.setGhostRobotVisible(true);
+  }
+}
+
+/**
+ * joint_pos 刷新：hardware 网格 + 面板；仿真臂在未对齐指令前不被遥测拉回，对齐后隐藏并入位。
+ */
+function refreshGhostVersusTelemetry(telemJoint) {
+  if (!kinematics || !robotGhost) return;
+
+  const hardwareActive = !!(robotHardware && robotHardware.visible);
+  const aligned = telemetryMatchesGhostCommand(telemJoint);
+  const updateGhostUrdfJoints = !hardwareActive || aligned;
+
+  jointsUI.syncFromStreamData(telemJoint, { updateGhostUrdfJoints });
+  viewer.setGhostRobotVisible(hardwareActive ? !aligned : true);
 }
 
 function vectorToMap(q) {
@@ -239,6 +303,8 @@ function applyJointVector(q, options = {}) {
       jointsUI.setValuesByMap(map, true);
     }
 
+    noteGhostShowsCommandAheadOfTelemetry();
+
     // refreshPoseReadout();
 
     // if (syncTaskUi) {
@@ -319,10 +385,10 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
           const currentMap = kinematics.getCurrentJointMap();
           currentMap[name] = value;
           kinematics.setJointMap(currentMap);
-          robot?.updateMatrixWorld(true);
           refreshPoseReadout();
           syncTaskUiFromRobot();
           syncViewerFromRobot();
+          noteGhostShowsCommandAheadOfTelemetry();
         });
       } else if (result.data && result.data.success) {
         console.log(`[onJointInput] ${name}: ✅ Real-time command succeeded`);
@@ -331,10 +397,10 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
           const currentMap = kinematics.getCurrentJointMap();
           currentMap[name] = value;
           kinematics.setJointMap(currentMap);
-          robot?.updateMatrixWorld(true);
           refreshPoseReadout();
           syncTaskUiFromRobot();
           syncViewerFromRobot();
+          noteGhostShowsCommandAheadOfTelemetry();
         });
       } else if (result.data && !result.data.success) {
         console.error(`[onJointInput] ${name}: ❌ Command failed: ${result.data.message}`);
@@ -384,6 +450,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       } else if (result.data && result.data.success) {
         setStatus("Successfully sent joint command.", "ok");
         console.log(`[onJointCommitted] ${name}: ✅ Command succeeded`);
+        noteGhostShowsCommandAheadOfTelemetry();
       } else if (result.data && !result.data.success) {
         setStatus(`Failed to sent joint command. ${result.data.message}`, "danger-text");
         console.error(`[onJointCommitted] ${name}: ❌ Command failed: ${result.data.message}`);
@@ -514,13 +581,28 @@ async function loadCurrentRobot(path) {
   try {
     setStatus("Loading URDF...", "warn");
 
-    robot = await loadRobotFromUrdf(path);
-    viewer.setRobot(robot);
-    // robot.updateMatrixWorld(true);
-    kinematics = new RobotKinematics(robot);
+    const [ghost, hardware] = await Promise.all([
+      loadRobotFromUrdf(path),
+      loadRobotFromUrdf(path),
+    ]);
+
+    robotGhost = ghost;
+    robotHardware = hardware;
+
+    /* 打散加载器对不同实例复用的 Material，否则两臂会改到同一实例 */
+    cloneMaterialsPerMesh(robotGhost);
+    cloneMaterialsPerMesh(robotHardware);
+
+    applyHardwareContrastStyle(robotHardware);
+    applyGhostVisualStyle(robotGhost);
+    viewer.setDualRobot(robotHardware, robotGhost);
+    viewer.setHardwareRobotVisible(false);
+    viewer.setGhostRobotVisible(true);
+
+    kinematics = new RobotKinematics(robotGhost);
     kinematicsLab.setRobotContext(kinematics);
 
-    jointsUI.build(robot);
+    jointsUI.build(robotGhost);
     teach.syncTeachJointMirror();
 
     syncMeta();
@@ -1000,7 +1082,11 @@ function connectStream(url) {
     robotStream = null;
   }
 
-  if (!gatewayUrl) return;
+  if (!gatewayUrl) {
+    viewer.setHardwareRobotVisible(false);
+    viewer.setGhostRobotVisible(true);
+    return;
+  }
 
   const normalizeStreamArray = (value) => {
     if (!Array.isArray(value)) return null;
@@ -1033,7 +1119,11 @@ function connectStream(url) {
       }
 
       if (jointPosition?.length) {
-        jointsUI.syncFromStreamData(jointPosition);
+        if (kinematics && robotHardware) {
+          applyJointVectorToUrdfRobot(robotHardware, jointPosition);
+          viewer.setHardwareRobotVisible(true);
+        }
+        refreshGhostVersusTelemetry(jointPosition);
         teach.syncTeachJointMirror();
       }
     } catch (error) {

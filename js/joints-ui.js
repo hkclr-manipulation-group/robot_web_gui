@@ -95,26 +95,31 @@ export class JointsUI {
 
   /* ---------------- set values ---------------- */
 
-  setJointValue(name, value, updateUi = true) {
+  /**
+   * @param {boolean} applyUrdfJoint 若为 false：只刷新面板数值/进度条，不改写机器人关节角度（仿真臂可由指令单独驱动）
+   */
+  setJointValue(name, value, updateUi = true, applyUrdfJoint = true) {
     const joint = this.jointMap[name];
     const ui = this.uiMap[name];
 
     if (!joint) return;
 
-    joint.setVal = value;
-    if (typeof joint.setJointValue === "function") {
-      joint.setJointValue(value);
-    } else {
-      joint.angle = value;
+    if (applyUrdfJoint) {
+      joint.setVal = value;
+      if (typeof joint.setJointValue === "function") {
+        joint.setJointValue(value);
+      } else {
+        joint.angle = value;
+      }
     }
 
     if (!updateUi || !ui) return;
 
     // 更新数值显示
     ui.value.textContent = formatJointValue(value, false);
-    
+
     // 更新进度条：映射到实际关节限位范围
-    const card = ui.slider.closest('.joint-card');
+    const card = ui.slider.closest(".joint-card");
     if (card) {
       const range = this.#getRange(joint);
       const toDeg = (r) => (r * 180) / Math.PI;
@@ -122,8 +127,8 @@ export class JointsUI {
       const degMin = toDeg(range.min);
       const degMax = toDeg(range.max);
       const pct = (degValue - degMin) / (degMax - degMin || 1);
-      
-      const fill = card.querySelector('.progress-fill');
+
+      const fill = card.querySelector(".progress-fill");
       if (fill) fill.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
     }
   }
@@ -146,18 +151,24 @@ export class JointsUI {
     );
   }
 
-  syncFromStreamData(q) {
+  /**
+   * @param {number[]} q 遥测关节向量（与 jointNames 同序）
+   * @param {{ updateGhostUrdfJoints?: boolean }} options
+   *        updateGhostUrdfJoints=false 时：只更新面板反映真实硬件，不挪动仿真 URDF（用于滞后对比）
+   */
+  syncFromStreamData(q, options = {}) {
+    const updateGhostUrdfJoints =
+      options.updateGhostUrdfJoints !== false;
+
     this.jointNames.forEach((name, index) => {
-      // 如果该关节正在被用户交互，跳过同步以避免冲突
       if (this.interactingJoints.has(name)) {
         return;
       }
 
       const value = q[index];
-      // 同步数据时更新UI，并更新基础值以便增量控制继续工作
-      this.setJointValue(name, value, true);
 
-      // 关键：更新UI缓存中的基础值，确保下一次增量操作基于最新实时值
+      this.setJointValue(name, value, true, updateGhostUrdfJoints);
+
       if (this.uiMap[name]) {
         this.uiMap[name].baseValue = value;
       }

@@ -8,7 +8,10 @@ export class RobotViewer {
 
     this.container = container;
 
-    this.robot = null;
+    /** @type {THREE.Object3D | null} Metallic / hardware-feedback arm */
+    this.hardwareRobot = null;
+    /** @type {THREE.Object3D | null} Lighter overlay for commanded / simulated pose */
+    this.ghostRobot = null;
     this.callbacks = {};
 
     this._lock = false;
@@ -220,29 +223,61 @@ export class RobotViewer {
 
   /* ---------------- Robot ---------------- */
 
-  setRobot(robot) {
+  /**
+   * @param {THREE.Object3D | null} hardwareRobot Metallic arm mapped from telemetry (nullable)
+   * @param {THREE.Object3D | null} ghostRobot Lighter arm for control / IK preview (nullable)
+   */
+  setDualRobot(hardwareRobot, ghostRobot) {
+    if (this.hardwareRobot) this.scene.remove(this.hardwareRobot);
+    if (this.ghostRobot) this.scene.remove(this.ghostRobot);
 
-    if (this.robot) this.scene.remove(this.robot);
+    this.hardwareRobot = hardwareRobot ?? null;
+    this.ghostRobot = ghostRobot ?? null;
 
-    this.robot = robot;
-
-    if (robot) this.scene.add(robot);
+    // Ghost drawn first so the hardware silhouette reads on top at coincident poses
+    if (this.ghostRobot) this.scene.add(this.ghostRobot);
+    if (this.hardwareRobot) this.scene.add(this.hardwareRobot);
 
     this.fitToRobot();
+  }
 
+  /** Single-robot layouts (backward compatible). */
+  setRobot(robot) {
+    if (!robot) {
+      this.setDualRobot(null, null);
+      return;
+    }
+    this.setDualRobot(robot, null);
+  }
+
+  setHardwareRobotVisible(visible) {
+    if (this.hardwareRobot) this.hardwareRobot.visible = !!visible;
+  }
+
+  /** 仿真/command 臂可视（橙色半透明） */
+  setGhostRobotVisible(visible) {
+    if (this.ghostRobot) this.ghostRobot.visible = !!visible;
   }
 
   /* ---------------- Fit camera ---------------- */
 
   fitToRobot() {
 
-    if (!this.robot) return;
+    const roots = [];
+    if (this.ghostRobot) roots.push(this.ghostRobot);
+    if (this.hardwareRobot) roots.push(this.hardwareRobot);
+    if (!roots.length) return;
 
-    this.robot.updateMatrixWorld(true);
+    let box = null;
+    roots.forEach((root) => {
+      root.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(root);
+      if (b.isEmpty()) return;
+      if (!box) box = b.clone();
+      else box.union(b);
+    });
 
-    const box = new THREE.Box3().setFromObject(this.robot);
-
-    if (box.isEmpty()) return;
+    if (!box || box.isEmpty()) return;
 
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
