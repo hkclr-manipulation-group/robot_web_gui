@@ -2,7 +2,9 @@ import {
   DEFAULT_ROBOTS,
   DEFAULT_URDF_PATH,
   PATH_DEFAULTS,
+  RT_INTERPOLATION,
   STORAGE_KEYS,
+  rtInterpolationPayload,
 } from "./config.js";
 
 import {
@@ -91,6 +93,7 @@ let lastGoalPose = null;
 const RETRY_DELAY = 3000;
 let robotStream = null; // EventSource for streaming robot data from gateway
 let robotStreamRetryTimer = null;
+let latestJointPosition = null; // latest joint_pos from /stream
 
 /* -------------------------------------------------------------------------- */
 /* Utilities                                                                   */
@@ -187,6 +190,27 @@ function vectorToMap(q) {
     acc[name] = q[idx];
     return acc;
   }, {});
+}
+
+function isTargetJointMapReached(targetMap, toleranceRad = JOINT_ALIGNMENT_TOL_RAD) {
+  if (!kinematics || !latestJointPosition?.length || !targetMap) return false;
+  const names = kinematics.getJointNames();
+  for (let i = 0; i < names.length; i++) {
+    const target = targetMap[names[i]];
+    const actual = latestJointPosition[i];
+    if (!Number.isFinite(target) || !Number.isFinite(actual)) continue;
+    if (Math.abs(target - actual) > toleranceRad) return false;
+  }
+  return true;
+}
+
+async function waitUntilTargetReached(targetMap, timeoutMs) {
+  const start = Date.now();
+  while (isBusy && Date.now() - start < timeoutMs) {
+    if (isTargetJointMapReached(targetMap)) return true;
+    await sleep(20);
+  }
+  return isTargetJointMapReached(targetMap);
 }
 
 function getCurrentPose() {
@@ -376,7 +400,11 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       const jointValues = Object.values(kinematics.getCurrentJointMap());
       console.log(`[onJointInput] ${name}: Sending real-time command with value=${value.toFixed(6)} rad (${(value * 180 / Math.PI).toFixed(2)}°)`);
       
-      const result = await sendJointCommand(jointNames, jointValues);
+      const result = await sendJointCommand(
+        jointNames,
+        jointValues,
+        rtInterpolationPayload(RT_INTERPOLATION.moveJoint)
+      );
       
       if (result.mode === "preview") {
         console.warn(`[onJointInput] ${name}: Preview mode - no gateway configured`);
@@ -442,7 +470,11 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
     
     console.log(`[onJointCommitted] ${name}: Sending command to backend...`);
     try {
-      const result = await sendJointCommand(Object.keys(map), Object.values(map));
+      const result = await sendJointCommand(
+        Object.keys(map),
+        Object.values(map),
+        rtInterpolationPayload(RT_INTERPOLATION.moveJoint)
+      );
       console.log(`[onJointCommitted] ${name}: Command result:`, result);
       
       if (result.mode === "preview") {
@@ -697,8 +729,37 @@ async function executeTrajectory(trajectory) {
       syncViewer: true,
     });
 
-    await sendJointCommand(Object.keys(map), Object.values(map));
-    await sleep(getPlayDelay());
+    const teachInterp =
+      i === 0
+        ? rtInterpolationPayload(RT_INTERPOLATION.teach.first)
+        : rtInterpolationPayload(RT_INTERPOLATION.teach.rest);
+    const result = await sendJointCommand(
+      Object.keys(map),
+      Object.values(map),
+      teachInterp
+    );
+
+    if (i === 0) {
+      const firstAccSec = Number(teachInterp?.interpolation_acc_time);
+      const timeoutMs =
+        Number.isFinite(firstAccSec) && firstAccSec > 0
+          ? firstAccSec * 1000 + 2000
+          : 7000;
+
+      // Wait for first waypoint convergence before dispatching remaining waypoints.
+      if (result.mode === "preview") {
+        await sleep(timeoutMs);
+      } else {
+        const reached = await waitUntilTargetReached(map, timeoutMs);
+        if (!reached) {
+          console.warn(
+            `[executeTrajectory] First waypoint not confirmed within ${timeoutMs} ms, continuing playback.`
+          );
+        }
+      }
+    } else {
+      await sleep(getPlayDelay());
+    }
   }
 
   isBusy = false;
@@ -786,7 +847,11 @@ function bindButtons() {
       syncViewer: true,
     });
 
-    const result = await sendHomeCommand(jointNames, zeroQ);
+    const result = await sendHomeCommand(
+      jointNames,
+      zeroQ,
+      rtInterpolationPayload(RT_INTERPOLATION.home)
+    );
     if (result.mode === "preview") {
       setStatus("Preview mode active. No gateway configured.", "warn");
     }else if (result.data.success) {
@@ -1119,6 +1184,7 @@ function connectStream(url) {
       }
 
       if (jointPosition?.length) {
+        latestJointPosition = jointPosition.slice();
         if (kinematics && robotHardware) {
           applyJointVectorToUrdfRobot(robotHardware, jointPosition);
           viewer.setHardwareRobotVisible(true);

@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from "./config.js";
+import { STORAGE_KEYS, TEACH } from "./config.js";
 import { enableTeachModeApi } from "./api.js";
 
 export class TeachSystem {
@@ -112,7 +112,7 @@ export function createTeachModule(options) {
       teachSystem.record(kinematics.getCurrentJointMap());
       syncTeachJointMirror();
       refreshTeachControls();
-    }, 180);
+    }, TEACH.recordSampleIntervalMs);
   }
 
   function stopTeachSampling() {

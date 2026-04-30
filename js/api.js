@@ -71,8 +71,8 @@ export async function enableTeachModeApi(enable) {
   return post('/teach', { enable });
 }
 
-export async function sendJointCommand(jointNames, jointValues) {
-  return post('/move_joint', { joint_names: jointNames, joint_values: jointValues });
+export async function sendJointCommand(jointNames, jointValues, interpolation = {}) {
+  return post('/move_joint', { joint_names: jointNames, joint_values: jointValues, ...interpolation });
 }
 
 export async function sendPoseCommand(poseArray) {
@@ -89,8 +89,8 @@ export async function sendStopCommand() {
   return post('/stop', {});
 }
 
-export async function sendHomeCommand(jointNames, jointValues) {
-  return post('/home', { joint_names: jointNames, joint_values: jointValues });
+export async function sendHomeCommand(jointNames, jointValues, interpolation = {}) {
+  return post('/home', { joint_names: jointNames, joint_values: jointValues, ...interpolation });
 }
 
 export async function sendZeroCommand(jointNames, jointValues) {

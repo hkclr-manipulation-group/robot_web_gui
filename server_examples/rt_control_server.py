@@ -44,9 +44,64 @@ udp = None
 current_controller_ip = None
 controller_lock = threading.Lock()
 last_heartbeat = 0
+_default_interpolation_acc = 1.0
+_default_interpolation_const_vel = 1.0
+
+_INTERPOLATION_BY_NAME = {
+    "LINEAR": RtInterpolationMethod.LINEAR,
+    "COS": RtInterpolationMethod.COS,
+    "CUBIC": RtInterpolationMethod.CUBIC,
+    "QUINTIC": RtInterpolationMethod.QUINTIC,
+    "NONE": RtInterpolationMethod.NONE,
+    "QUINTIC_PATH": RtInterpolationMethod.QUINTIC_PATH,
+}
+
+def _interpolation_method_from_payload(payload):
+    raw = payload.get("interpolation_type")
+    if raw is None:
+        raw = payload.get("interpolation")
+    if raw is None:
+        raw = payload.get("interpolationType")
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        try:
+            return RtInterpolationMethod(raw)
+        except ValueError:
+            return None
+    key = str(raw).strip().upper()
+    return _INTERPOLATION_BY_NAME.get(key)
+
+def _apply_move_joint_interpolation(panel: RtPanelCommand, payload: dict):
+    """Set interpolation for joint moves. Path defaults: /home → COS 5s; /move_joint and /zero → COS 1s. Override via payload."""
+    path = payload.get("path", "/move_joint")
+    explicit_method = _interpolation_method_from_payload(payload)
+    explicit_acc = payload.get("interpolation_acc_time")
+    if explicit_acc is None:
+        explicit_acc = payload.get("interpolationAccTime")
+    explicit_vel = payload.get("interpolation_const_vel_time")
+    if explicit_vel is None:
+        explicit_vel = payload.get("interpolationConstVelTime")
+
+    if explicit_method is not None:
+        panel.interpolation_type = explicit_method
+    else:
+        panel.interpolation_type = RtInterpolationMethod.COS
+
+    if explicit_acc is not None:
+        panel.interpolation_acc_time = float(explicit_acc)
+    elif explicit_method is None:
+        panel.interpolation_acc_time = 5.0 if path == "/home" else 1.0
+    else:
+        panel.interpolation_acc_time = _default_interpolation_acc
+
+    if explicit_vel is not None:
+        panel.interpolation_const_vel_time = float(explicit_vel)
+    else:
+        panel.interpolation_const_vel_time = _default_interpolation_const_vel
 
 def initialize_panel_command(config_path, panel: RtPanelCommand):
-    global udp_dt_send
+    global udp_dt_send, _default_interpolation_acc, _default_interpolation_const_vel
     yaml_node = config_loader.load_yaml(config_path)
     config = yaml_node.as_dict()
     
@@ -67,6 +122,8 @@ def initialize_panel_command(config_path, panel: RtPanelCommand):
     panel.interpolation_acc_time = config["panel"]["general"]["acc_time"]
     panel.interpolation_const_vel_time = config["panel"]["general"]["vel_time"]
     panel.none_interpolation_saturation_ratio = config["panel"]["general"]["none_interpolation_saturation_adjust"]
+    _default_interpolation_acc = float(config["panel"]["general"]["acc_time"])
+    _default_interpolation_const_vel = float(config["panel"]["general"]["vel_time"])
     
     panel.arm_target_mode = PanelTargetMode.SINGLE_POINT
     panel.arm_waypoint_size = 0
@@ -145,6 +202,7 @@ def move_joint(robot_id, payload):
     if robot_id == "arm_v1":
         joint_values = payload.get("joint_values", None)
         if joint_values is not None and len(joint_values) > 0:
+            _apply_move_joint_interpolation(rt_panel_command, payload)
             # 🔧 切换到关节控制模式
             rt_panel_command.motion_type = 0  # 0 表示关节空间控制
             rt_panel_command.joint_cmd[0] = joint_values
@@ -350,8 +408,25 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/teach":
             func_ptr = lambda a: enable_teach(a, {"path": self.path, **data})
             result = post_request(robot_id, {"path": self.path, **data}, func_ptr)
+        else:
+            result = {"ok": False, "error": f"Unknown path: {self.path}"}
 
-        status = 200 if result.get("ok", False) else 400
+        if result.get("ok", False):
+            status = 200
+        elif self.path in (
+            "/ping",
+            "/disconnect",
+            "/connect",
+            "/move_joint",
+            "/home",
+            "/zero",
+            "/move_pose",
+            "/move_pose_incremental",
+            "/teach",
+        ):
+            status = 400
+        else:
+            status = 404
         self._set_headers(status)
         self.wfile.write(json.dumps(result).encode("utf-8"))
         
