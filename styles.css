@@ -16,7 +16,13 @@
   --shadow: 0 14px 40px rgba(19, 33, 62, 0.15);
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; overflow: hidden; }
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+}
 body {
   color: var(--text);
   background-image: url('_exportedimage/_exportedimage/Background.svg');
@@ -105,17 +111,22 @@ input[type="range"] {
   /* Unified surface: merge left/right into a single white block with 8px outer margin */
   --local-gap: var(--space);
   display: grid;
-  grid-template-columns: 70% 30%;
+  /* fr + gap 不会让列宽之和超过容器（避免 % 列 + gap > 100% 出现横向滚动） */
+  grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
   gap: var(--local-gap);
-  align-items: start;
+  align-items: stretch;
+  min-height: 0;
   padding: calc(var(--local-gap) * 2);
   /* make layout exactly fit viewport minus outer margins to avoid top-level scroll */
   height: calc(100vh - (var(--local-gap) * 2));
+  height: calc(100dvh - (var(--local-gap) * 2));
   margin: var(--local-gap);
   background: var(--panel);
   border-radius: 18px;
   box-shadow: var(--shadow);
   overflow: hidden;
+  width: calc(100% - (var(--local-gap) * 2));
+  max-width: calc(100% - (var(--local-gap) * 2));
 }
 .card {
   background: var(--panel);
@@ -133,6 +144,7 @@ input[type="range"] {
   flex-direction: column;
   gap: 12px;
   flex: 1 1 auto;
+  min-height: 0;
 }
 
 .tab-page.active {
@@ -158,12 +170,13 @@ input[type="range"] {
   border-color: var(--accent);
 }
 .viewer-panel {
-  position: sticky;
-  top: 98px;
-  height: 100%;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: auto; /* allow internal scrolling */
+  /* 由 #viewer 内 flex 收缩适配高度，不在左栏再出现滚动条 */
+  overflow: hidden;
 }
 
 /* Inside the unified .layout surface, remove duplicate card chrome for the two large blocks */
@@ -177,12 +190,14 @@ input[type="range"] {
 
 /* Right side panel itself: keep inner 16px spacing from the unified surface edges */
 .sidebar {
-  height: calc(100vh - 114px);
-  overflow: visible;
+  min-height: 0;
+  min-width: 0;
   padding: var(--space);
+  padding-right: calc(var(--space) + 2px);
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
 .viewer-panel .viewer-badge {
@@ -473,19 +488,15 @@ input[type="range"] {
   font-variant-numeric: tabular-nums;
 }
 
-#viewer { flex: 1; min-height: 520px; }
+#viewer {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
 .status-block { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .status-text { font-size: 14px; }
 .viewer-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 24px; }
-.sidebar {
-  height: 100%;
-  /* internal scrolling for sidebar content */
-  overflow: auto;
-  padding-right: 2px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 .sidebar::-webkit-scrollbar, .joint-list::-webkit-scrollbar, .path-preview::-webkit-scrollbar { width: 10px; }
 .sidebar::-webkit-scrollbar-thumb, .joint-list::-webkit-scrollbar-thumb, .path-preview::-webkit-scrollbar-thumb {
   background: #f6f6f6;
@@ -815,13 +826,19 @@ input[type="range"] {
 .warn { color: var(--warn); }
 .danger-text { color: var(--danger); }
 @media (max-width: 1280px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
   .viewer-panel {
     position: relative;
     top: 0;
-    height: min(68vh, 760px);
+    min-height: 0;
   }
-  .sidebar { height: auto; overflow: visible; }
+  .sidebar {
+    min-height: 0;
+    overflow: hidden;
+  }
 
   /* Adjust EE Pose Card for smaller screens */
   .ee-pose-card {
