@@ -194,7 +194,7 @@ export class RobotViewer {
 
     this.scene.add(this.target);
 
-    this.transform.attach(this.target);
+    // this.transform.attach(this.target);
 
   }
 
