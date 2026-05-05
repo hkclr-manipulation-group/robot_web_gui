@@ -799,6 +799,16 @@ input[type="range"] {
   transform: translateY(var(--slider-moz-nudge));
 }
 
+/*
+ * Chrome / Edge / Safari：原生 range 与左侧进度条的中线相对 Firefox 偏下（Firefox 使用 -moz-range-track 已有位移）。
+ * 仅对支持 ::-webkit-slider-thumb 的引擎整体上移 input，勿改伪元素 transform（Chrome 易绘制异常）。
+ */
+@supports selector(::-webkit-slider-thumb) {
+  .slider-wrap .slider-large {
+    transform: translateY(-12px);
+  }
+}
+
 /* ensure labels and elements fit on small screens */
 @media (max-width: 820px) {
   .slider-large {
