@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { getRobotTipLink } from "./kinematics.js";
 
 export class RobotViewer {
 
@@ -12,6 +13,10 @@ export class RobotViewer {
     this.hardwareRobot = null;
     /** @type {THREE.Object3D | null} Lighter overlay for commanded / simulated pose */
     this.ghostRobot = null;
+    /** @type {THREE.AxesHelper | null} */
+    this._eeAxesHardware = null;
+    /** @type {THREE.AxesHelper | null} */
+    this._eeAxesGhost = null;
     this.callbacks = {};
 
     this._lock = false;
@@ -231,6 +236,11 @@ export class RobotViewer {
     if (this.hardwareRobot) this.scene.remove(this.hardwareRobot);
     if (this.ghostRobot) this.scene.remove(this.ghostRobot);
 
+    this.#disposeEeAxes(this._eeAxesHardware);
+    this.#disposeEeAxes(this._eeAxesGhost);
+    this._eeAxesHardware = null;
+    this._eeAxesGhost = null;
+
     this.hardwareRobot = hardwareRobot ?? null;
     this.ghostRobot = ghostRobot ?? null;
 
@@ -238,7 +248,37 @@ export class RobotViewer {
     if (this.ghostRobot) this.scene.add(this.ghostRobot);
     if (this.hardwareRobot) this.scene.add(this.hardwareRobot);
 
+    if (this.hardwareRobot) {
+      this._eeAxesHardware = this.#attachEndEffectorAxes(this.hardwareRobot);
+    }
+    if (this.ghostRobot) {
+      this._eeAxesGhost = this.#attachEndEffectorAxes(this.ghostRobot);
+    }
+
     this.fitToRobot();
+  }
+
+  /**
+   * 末端连杆上的 RGB 坐标系（X 红 / Y 绿 / Z 蓝），随关节运动。
+   * @param {THREE.Object3D} robot
+   * @returns {THREE.AxesHelper | null}
+   */
+  #attachEndEffectorAxes(robot) {
+    const tip = getRobotTipLink(robot);
+    if (!tip) return null;
+    const axes = new THREE.AxesHelper(0.14);
+    axes.name = "ee_axes_helper";
+    tip.add(axes);
+    return axes;
+  }
+
+  #disposeEeAxes(axes) {
+    if (!axes) return;
+    axes.parent?.remove(axes);
+    axes.geometry?.dispose?.();
+    const mat = axes.material;
+    if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.());
+    else mat?.dispose?.();
   }
 
   /** Single-robot layouts (backward compatible). */

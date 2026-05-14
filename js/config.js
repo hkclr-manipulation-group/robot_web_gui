@@ -38,13 +38,13 @@ export const IK_DEFAULTS = {
 export const PATH_DEFAULTS = {
   steps: 50,
   /** Delay between trajectory waypoints during play (`executeTrajectory` / Play Delay UI fallback). */
-  delayMs: 10,
+  delayMs: 1000,
 };
 
 /** Teach-mode timing (see `teach.js`). */
 export const TEACH = {
   /** Interval (ms) between recorded joint samples while recording a path. */
-  recordSampleIntervalMs: 10,
+  recordSampleIntervalMs: 1000,
 };
 
 /**
@@ -59,7 +59,7 @@ export const RT_INTERPOLATION = {
   },
   moveJoint: {
     interpolation_type: 'COS',
-    interpolation_acc_time: 1,
+    interpolation_acc_time: 5,
   },
   /**
    * Teach playback (`executeTrajectory`): waypoint index 0 uses `first`; index >= 1 uses `rest`.
@@ -71,8 +71,8 @@ export const RT_INTERPOLATION = {
       interpolation_acc_time: 5,
     },
     rest: {
-      interpolation_type: 'None',
-      interpolation_acc_time: 0,
+      interpolation_type: 'COS',
+      interpolation_acc_time: 1,
     },
   },
 };

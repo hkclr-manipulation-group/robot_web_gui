@@ -54,9 +54,20 @@ function getTipObject(robot, chain) {
   if (robot.links && robot.links.tool0) return robot.links.tool0;
   if (robot.links && robot.links.ee_link) return robot.links.ee_link;
   if (robot.links && robot.links.tcp) return robot.links.tcp;
+  const tipName = chain?.length
+    ? chain[chain.length - 1]?.joint?.children?.[0]?.name
+    : null;
+  if (tipName && robot.links?.[tipName]) return robot.links[tipName];
   let last = robot;
   robot.traverse((obj) => { if (obj.isURDFLink || obj.isObject3D) last = obj; });
   return last;
+}
+
+/** URDF 末端连杆（与 IK / FK tip 一致），用于在 viewer 上挂接辅助坐标系等 */
+export function getRobotTipLink(robot) {
+  if (!robot) return null;
+  const chain = getChain(robot);
+  return getTipObject(robot, chain);
 }
 
 function applyJointVector(chain, q) {
