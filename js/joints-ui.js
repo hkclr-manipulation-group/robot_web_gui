@@ -50,6 +50,8 @@ export class JointsUI {
       return type === "revolute" || type === "continuous";
     });
 
+    // 面板自上而下与硬件/遥测「基础→末端」(J1…J6) 对偶：界面显示为 J6…J1
+    names.reverse();
     this.jointNames = names;
 
     if (this.countElement)
@@ -140,8 +142,9 @@ export class JointsUI {
   }
 
   setValuesByVector(q, updateUi = true) {
+    const n = this.jointNames.length;
     this.jointNames.forEach((name, i) =>
-      this.setJointValue(name, q[i], updateUi)
+      this.setJointValue(name, q[n - 1 - i], updateUi)
     );
   }
 
@@ -152,7 +155,7 @@ export class JointsUI {
   }
 
   /**
-   * @param {number[]} q 遥测关节向量（与 jointNames 同序）
+   * @param {number[]} q 遥测关节向量（基础→末端，与运动学/网关 J1…J6 一致；面板 jointNames 为反序展示）
    * @param {{ updateGhostUrdfJoints?: boolean }} options
    *        updateGhostUrdfJoints=false 时：只更新面板反映真实硬件，不挪动仿真 URDF（用于滞后对比）
    */
@@ -160,12 +163,13 @@ export class JointsUI {
     const updateGhostUrdfJoints =
       options.updateGhostUrdfJoints !== false;
 
+    const n = this.jointNames.length;
     this.jointNames.forEach((name, index) => {
       if (this.interactingJoints.has(name)) {
         return;
       }
 
-      const value = q[index];
+      const value = q[n - 1 - index];
 
       this.setJointValue(name, value, true, updateGhostUrdfJoints);
 
