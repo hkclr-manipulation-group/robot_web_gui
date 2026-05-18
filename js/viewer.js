@@ -68,7 +68,10 @@ export class RobotViewer {
   _initCamera() {
 
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
-    this.camera.position.set(0, -2, 2);
+    // 与 scene.up（Z 向上）一致，否则 OrbitControls 仍按默认 Y 上计算，换观察侧会出现倒立画面
+    this.camera.up.copy(this.scene.up);
+    // 默认在 +Y 侧观察（相对原先 -Y 侧绕 Z 轴转 180°，与加载机械臂后 fitToRobot 一致）
+    this.camera.position.set(0, 2, 2);
 
   }
 
@@ -132,20 +135,35 @@ export class RobotViewer {
     const hemi = new THREE.HemisphereLight(
       0xffffff,
       0x1c2c4b,
-      1.15
+      0.98
     );
 
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(
-      0xffffff,
-      1.05
-    );
+    const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+    this.scene.add(ambient);
 
-    dir.position.set(3, -3, 4);
-    dir.castShadow = true;
+    // 主光：承担阴影（四周辅光不投影，避免多重阴影）
+    const key = new THREE.DirectionalLight(0xffffff, 0.88);
+    key.position.set(3, -3, 4);
+    key.castShadow = true;
+    this.scene.add(key);
 
-    this.scene.add(dir);
+    // 围绕工作区的辅光（约 1 m 尺度），减少单侧死黑、突出轮廓
+    const surround = [
+      { pos: [ -3.2,  2.8,  3.6 ], color: 0xfff6f0, intensity: 0.4  },
+      { pos: [  3.6,  2.4,  3.0 ], color: 0xe8eefc, intensity: 0.34 },
+      { pos: [  0.6, -3.5,  3.2 ], color: 0xffffff, intensity: 0.3  },
+      { pos: [ -2.0, -2.8,  4.0 ], color: 0xf0f4ff, intensity: 0.26 },
+      { pos: [  0.0,  0.0,  5.5 ], color: 0xffffff, intensity: 0.22 },
+    ];
+
+    surround.forEach(({ pos, color, intensity }) => {
+      const d = new THREE.DirectionalLight(color, intensity);
+      d.position.set(pos[0], pos[1], pos[2]);
+      d.castShadow = false;
+      this.scene.add(d);
+    });
 
   }
 
@@ -329,11 +347,12 @@ export class RobotViewer {
     this.camera.near = Math.max(0.01, radius / 200);
     this.camera.far = Math.max(20, radius * 20);
 
+    // 相机在机器人 +Y 侧（水平方向与旧默认相反，呈侧视轮廓）
     this.camera.position.copy(
       center.clone().add(
         new THREE.Vector3(
           radius * 0,
-          -radius * 2.5,
+          radius * 2.5,
           radius * 0.8
         )
       )
@@ -467,7 +486,7 @@ updateTargetPose(pose) {
 
   resetView() {
 
-    this.camera.position.set(2.2, -2.0, 1.6);
+    this.camera.position.set(-2.2, 2.0, 1.6);
 
     this.orbit.target.set(0, 0, 0.35);
 
