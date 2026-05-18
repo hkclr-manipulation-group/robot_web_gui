@@ -85,6 +85,21 @@ export class RobotViewer {
     );
 
     this.orbit.enableDamping = true;
+    this.orbit.enablePan = true;
+    this.orbit.zoomToCursor = true;
+    this.orbit.panSpeed = 1.15;
+
+    // 中键与右键均为平移（滚轮仍缩放）；避免右键触发浏览器菜单导致无法拖拽平移
+    this.orbit.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.PAN,
+    };
+
+    this.renderer.domElement.addEventListener(
+      "contextmenu",
+      (e) => e.preventDefault()
+    );
 
     this.orbit.target.set(0, 0, 0.35);
     this.orbit.update();
