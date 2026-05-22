@@ -46,6 +46,17 @@ controller_lock = threading.Lock()
 last_heartbeat = 0
 _default_interpolation_acc = 1.0
 _default_interpolation_const_vel = 1.0
+# Wait up to this long for another HTTP request's send_to_robot() to finish.
+SEND_LOCK_TIMEOUT_SEC = 30.0
+# Max setting-sync UDP cycles (~5 s at dt_send=0.03) before giving up.
+SETTING_UPDATE_MAX_CYCLES = 167
+# Wait for first planner state from rt_control (same idea as desktop panel startup).
+PLANNER_STATE_WAIT_SEC = 5.0
+_NO_PLANNER_STATE_MSG = (
+    "No planner state from rt_control over UDP. "
+    "Check rt_control is running and config.yaml ports match "
+    "(panel local port -> rt_control remote port)."
+)
 
 _INTERPOLATION_BY_NAME = {
     "LINEAR": RtInterpolationMethod.LINEAR,
@@ -107,7 +118,7 @@ def initialize_panel_command(config_path, panel: RtPanelCommand):
     
     udp_dt_send = config["panel"]["dt_send"]
     
-    panel.need_setting_update = True
+    panel.need_setting_update = False
     panel.simulation = True
     panel.motion_type = RtMotionControl.JOINT
     panel.connection_state = RtConnectionState.REMOTE
@@ -162,37 +173,83 @@ def initialize_panel_command(config_path, panel: RtPanelCommand):
             n_gri_joints = panel.gripper_joint_size[gri_i]
             panel.gripper_joint_command.append([0.0]*n_gri_joints)
 
+def load_panel_udp_endpoints(config_path):
+    config = config_loader.load_yaml(config_path).as_dict()
+    return (
+        config["panel"]["ip"],
+        int(config["panel"]["port"]),
+        config["rt_control"]["ip"],
+        int(config["rt_control"]["port"]),
+        max(1, int(config["panel"]["dt_receive"] * 1000)),
+    )
+
+def _refresh_planner_state():
+    global rt_planner_state
+    fresh = udp.receive()
+    if fresh is not None:
+        rt_planner_state = fresh
+
+def _ensure_planner_state():
+    """Block until rt_control planner state is received over UDP."""
+    _refresh_planner_state()
+    if rt_planner_state is not None:
+        return True
+    deadline = time.monotonic() + PLANNER_STATE_WAIT_SEC
+    interval = udp_dt_send if udp_dt_send else 0.03
+    while time.monotonic() < deadline:
+        time.sleep(interval)
+        _refresh_planner_state()
+        if rt_planner_state is not None:
+            return True
+    return False
+
 def send_to_robot(robot_id, update_func=None):
     global rt_panel_command, rt_planner_state
-    acquired = send_to_robot_lock.acquire(timeout=udp_dt_send)
+    acquired = send_to_robot_lock.acquire(timeout=SEND_LOCK_TIMEOUT_SEC)
+    if not acquired:
+        return False, "Wait for the previous action to finish."
+
     success, message = True, ""
-    if acquired:
-        if rt_planner_state is None: return False, "Open rt_control connection first."
+    try:
+        if not _ensure_planner_state():
+            return False, _NO_PLANNER_STATE_MSG
 
         first_update = True
-        while first_update or rt_panel_command.need_setting_update or rt_planner_state.setting_update_finished:
-            first_update = False
-            
-            #Update rt_panel_command
-            if update_func: 
+        cycles = 0
+        while (
+            first_update
+            or rt_panel_command.need_setting_update
+            or rt_planner_state.setting_update_finished
+        ):
+            cycles += 1
+            if cycles > SETTING_UPDATE_MAX_CYCLES:
+                success, message = False, "Setting update timed out. Is rt_control running?"
+                break
+
+            if update_func:
                 success, message = update_func(robot_id)
-                if not success: break
-            
+                if not success:
+                    break
+
             if rt_panel_command.need_setting_update and not first_update:
-                time_diff_sec = (rt_panel_command.send_timestamp - rt_planner_state.received_panel_command_timestamp)/1e6
-                if rt_planner_state.setting_update_finished and time_diff_sec < 10*udp_dt_send:
+                time_diff_sec = (
+                    rt_panel_command.send_timestamp
+                    - rt_planner_state.received_panel_command_timestamp
+                ) / 1e6
+                if (
+                    rt_planner_state.setting_update_finished
+                    and time_diff_sec < 5 * udp_dt_send
+                ):
                     rt_panel_command.need_setting_update = False
-                print(f"time diff: {time_diff_sec:.3f} sec, smaller: {time_diff_sec < 10*udp_dt_send}")
 
             rt_panel_command.send_timestamp = int(time.time_ns() / 1e3)
             udp.send(rt_panel_command)
             time.sleep(udp_dt_send)
-            print(f"rt_panel_command.send_timestamp: {rt_panel_command.send_timestamp}, setting_update_finished: {rt_planner_state.setting_update_finished}, need_setting_update: {rt_panel_command.need_setting_update}")
-        print("rt_panel_command.joint_cmd:", rt_panel_command.joint_cmd)
-        print("rt_panel_command.task_cmd:", rt_panel_command.task_cmd)
+            _refresh_planner_state()
+            first_update = False
+    finally:
         send_to_robot_lock.release()
-    else:
-        return False, "Wait for the previous action to finish."
+
     return success, message
 
 def move_joint(robot_id, payload):
@@ -302,7 +359,8 @@ def move_pose_incremental(robot_id, payload):
         
 def enable_teach(robot_id, payload):
     global rt_panel_command, rt_planner_state
-    if rt_planner_state is None: return False, "Open rt_control connection first."
+    if not _ensure_planner_state():
+        return False, _NO_PLANNER_STATE_MSG
     
     if robot_id == "arm_v1":
         prev_force_control = rt_panel_command.force_control
@@ -321,7 +379,8 @@ def enable_teach(robot_id, payload):
     
 def connect_to_hardware(robot_id, payload):
     global rt_panel_command, rt_planner_state
-    if rt_planner_state is None: return False, "Open rt_control connection first."
+    if not _ensure_planner_state():
+        return False, _NO_PLANNER_STATE_MSG
     if robot_id == "arm_v1":
         rt_panel_command.simulation = False if payload.get("enable", False) else True
         rt_panel_command.force_control = RtForceControlMode.NONE
@@ -458,10 +517,23 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 if __name__ == "__main__":
     config_path = parent_path + "/cuarm_configuration/arm_v1/config.yaml"
     initialize_panel_command(config_path, rt_panel_command)
-    udp = CuarmUdpThread("127.0.0.1", 12301, "127.0.0.1", 12201, CuarmUdp.unpack_rt_planner_state, CuarmUdp.pack_rt_panel_command, recv_delay_ms=5)
+    panel_ip, panel_port, rt_ip, rt_port, recv_delay_ms = load_panel_udp_endpoints(config_path)
+    udp = CuarmUdpThread(
+        panel_ip,
+        panel_port,
+        rt_ip,
+        rt_port,
+        CuarmUdp.unpack_rt_planner_state,
+        CuarmUdp.pack_rt_panel_command,
+        recv_delay_ms=recv_delay_ms,
+    )
     try:
         server = ThreadedHTTPServer(("0.0.0.0", 9000), Handler)
         print("Gateway listening on http://0.0.0.0:9000")
+        print(
+            f"UDP panel bind {panel_ip}:{panel_port} -> rt_control {rt_ip}:{rt_port} "
+            f"(from {config_path})"
+        )
         server.serve_forever()
     except KeyboardInterrupt:
         print("Ctrl+C detected. Exiting...")
