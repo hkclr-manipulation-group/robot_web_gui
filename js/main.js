@@ -771,6 +771,15 @@ async function executeTrajectory(trajectory) {
   return true;
 }
 
+// Teach recording uses live joint_pos from /stream
+function getTeachRecordJointMap() {
+  if (!kinematics) return null;
+  if (latestJointPosition?.length) {
+    return vectorToMap(latestJointPosition);
+  }
+  return kinematics.getCurrentJointMap();
+}
+
 const teach = createTeachModule({
   elements: {
     teachCountEl,
@@ -782,6 +791,7 @@ const teach = createTeachModule({
     teachStopBtnEl,
   },
   getKinematics: () => kinematics,
+  getRecordJointMap: getTeachRecordJointMap,
   setStatus,
   executeTrajectory,
   sendStopCommand,

@@ -38,6 +38,7 @@ function setTeachButtonState(buttonEl, enabled) {
  * @param {object} options
  * @param {{ teachCountEl: HTMLElement | null; pathPreviewEl: HTMLElement | null; jointContainerTeachEl: HTMLElement | null; jointContainerEl: HTMLElement | null; teachRecordBtnEl: HTMLElement | null; teachPlayBtnEl: HTMLElement | null; teachStopBtnEl: HTMLElement | null }} options.elements
  * @param {() => import("./kinematics.js").RobotKinematics | null} options.getKinematics
+ * @param {() => Record<string, number> | null} options.getRecordJointMap Joint map for teach recording (prefer live telemetry over ghost URDF).
  * @param {(text: string, cls?: string) => void} options.setStatus
  * @param {(trajectory: Record<string, number>[]) => Promise<boolean | void>} options.executeTrajectory
  * @param {() => Promise<unknown>} options.sendStopCommand
@@ -55,6 +56,7 @@ export function createTeachModule(options) {
       teachStopBtnEl,
     },
     getKinematics,
+    getRecordJointMap,
     setStatus,
     executeTrajectory,
     sendStopCommand,
@@ -107,9 +109,10 @@ export function createTeachModule(options) {
     }
 
     teachRecordTimer = setInterval(() => {
-      const kinematics = getKinematics();
-      if (!kinematics || teachUiState !== "recording") return;
-      teachSystem.record(kinematics.getCurrentJointMap());
+      if (teachUiState !== "recording") return;
+      const jointMap = getRecordJointMap();
+      if (!jointMap) return;
+      teachSystem.record(jointMap);
       syncTeachJointMirror();
       refreshTeachControls();
     }, TEACH.recordSampleIntervalMs);
@@ -123,11 +126,11 @@ export function createTeachModule(options) {
 
   async function onTeachRecordClick() {
     if (teachUiState === "recording" || teachUiState === "playing") return;
-    const kinematics = getKinematics();
-    if (!kinematics) return;
+    const jointMap = getRecordJointMap();
+    if (!jointMap) return;
 
     teachSystem.clear();
-    teachSystem.record(kinematics.getCurrentJointMap());
+    teachSystem.record(jointMap);
     teachUiState = "recording";
     refreshTeachControls();
     setStatus("Teach recording started.", "warn");
