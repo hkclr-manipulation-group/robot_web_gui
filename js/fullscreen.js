@@ -101,6 +101,8 @@ export function initFullscreen() {
 
   function updateButtonState() {
     const active = isFullscreen();
+    const nativeActive = Boolean(getFullscreenElement());
+    document.documentElement.classList.toggle("is-native-fullscreen", nativeActive);
     btn.classList.toggle("is-active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
     btn.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
