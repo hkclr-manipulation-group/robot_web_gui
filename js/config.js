@@ -41,10 +41,16 @@ export const PATH_DEFAULTS = {
   delayMs: 1000,
 };
 
+/** 3D viewer display (see `main.js`, `viewer.js`). */
+export const VIEWER = {
+  /** Show ghost (command / IK preview) robot. When false, only the hardware arm is shown when telemetry is available. */
+  showGhostRobot: true,
+};
+
 /** Teach-mode timing (see `teach.js`). */
 export const TEACH = {
   /** Interval (ms) between recorded joint samples while recording a path. */
-  recordSampleIntervalMs: 1000,
+  recordSampleIntervalMs: 100,
 };
 
 /**

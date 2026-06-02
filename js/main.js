@@ -4,6 +4,7 @@ import {
   PATH_DEFAULTS,
   RT_INTERPOLATION,
   STORAGE_KEYS,
+  VIEWER,
   rtInterpolationPayload,
 } from "./config.js";
 
@@ -79,6 +80,8 @@ const playDelayEl = document.getElementById("playDelay");
 
 /** URDF tuned from commands / IK (lighter “ghost”). */
 let robotGhost = null;
+/** Teach tab (`planning` page) active — ghost robot stays hidden while true. */
+let teachTabActive = false;
 /** Duplicate URDF driven by streamed joint telemetry (full materials). */
 let robotHardware = null;
 let kinematics = null;
@@ -146,6 +149,12 @@ function applyJointVectorToUrdfRobot(urdfRobot, jointVector) {
 /** rad：仿真指令与遥测对齐后仿真臂淡出 */
 const JOINT_ALIGNMENT_TOL_RAD = 0.04;
 
+function applyGhostRobotVisibility(desiredVisible) {
+  const show =
+    VIEWER.showGhostRobot && !teachTabActive && !!desiredVisible;
+  viewer.setGhostRobotVisible(show);
+}
+
 function telemetryMatchesGhostCommand(telemJoint) {
   if (!kinematics || !telemJoint?.length) return false;
   const n = kinematics.getJointNames().length;
@@ -166,7 +175,7 @@ function telemetryMatchesGhostCommand(telemJoint) {
 /** 有新的关节指令或 IK 轨迹时调用：在真实硬件与指令未对齐前先显示仿真臂 */
 function noteGhostShowsCommandAheadOfTelemetry() {
   if (robotHardware?.visible) {
-    viewer.setGhostRobotVisible(true);
+    applyGhostRobotVisibility(true);
   }
 }
 
@@ -181,7 +190,7 @@ function refreshGhostVersusTelemetry(telemJoint) {
   const updateGhostUrdfJoints = !hardwareActive || aligned;
 
   jointsUI.syncFromStreamData(telemJoint, { updateGhostUrdfJoints });
-  viewer.setGhostRobotVisible(hardwareActive ? !aligned : true);
+  applyGhostRobotVisibility(hardwareActive ? !aligned : true);
 }
 
 function vectorToMap(q) {
@@ -629,7 +638,7 @@ async function loadCurrentRobot(path) {
     applyGhostVisualStyle(robotGhost);
     viewer.setDualRobot(robotHardware, robotGhost);
     viewer.setHardwareRobotVisible(false);
-    viewer.setGhostRobotVisible(true);
+    applyGhostRobotVisibility(true);
 
     kinematics = new RobotKinematics(robotGhost);
     kinematicsLab.setRobotContext(kinematics);
@@ -1105,9 +1114,15 @@ function bindCardTabs() {
 
     const syncTeachVisibility = (pageId) => {
       const teachActive = pageId === "planning";
+      teachTabActive = teachActive;
       viewerPanelEl?.classList.toggle("teach-active", teachActive);
       if (teachActive) {
         teach.syncTeachJointMirror();
+        applyGhostRobotVisibility(false);
+      } else if (latestJointPosition?.length) {
+        refreshGhostVersusTelemetry(latestJointPosition);
+      } else {
+        applyGhostRobotVisibility(true);
       }
     };
 
@@ -1159,7 +1174,7 @@ function connectStream(url) {
 
   if (!gatewayUrl) {
     viewer.setHardwareRobotVisible(false);
-    viewer.setGhostRobotVisible(true);
+    applyGhostRobotVisibility(true);
     return;
   }
 

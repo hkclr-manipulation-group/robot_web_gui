@@ -3,6 +3,7 @@ from curses.panel import panel
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import json
+import math
 import threading
 import time
 import traceback
@@ -203,6 +204,12 @@ def _ensure_planner_state():
             return True
     return False
 
+def _snapshot_joint_cmd_from_planner(panel: RtPanelCommand, state: RtPlannerState):
+    """Copy live planner joint positions into panel joint_cmd (2D per arm)."""
+    if state is None or not state.joint_pos:
+        return
+    panel.joint_cmd = [[float(v) for v in arm] for arm in state.joint_pos]
+
 def send_to_robot(robot_id, update_func=None):
     global rt_panel_command, rt_planner_state
     acquired = send_to_robot_lock.acquire(timeout=SEND_LOCK_TIMEOUT_SEC)
@@ -364,17 +371,29 @@ def enable_teach(robot_id, payload):
     
     if robot_id == "arm_v1":
         prev_force_control = rt_panel_command.force_control
+        prev_target_type = rt_panel_command.target_type
+        prev_actuator_mode = rt_panel_command.actuator_mode
+        prev_motion_type = rt_panel_command.motion_type
         if payload.get("enable", False):
+            # Gravity teach only runs in joint motion mode (see sole_arm_planner).
+            rt_panel_command.motion_type = RtMotionControl.JOINT
             rt_panel_command.target_type = ControlType.TORQUE
             rt_panel_command.actuator_mode = ControlType.TORQUE
             rt_panel_command.force_control = RtForceControlMode.GRAVITY
-            rt_panel_command.joint_cmd = [0.0]*6
+            # Keep command at the current pose; zeros would jerk the arm on mode switch.
+            _snapshot_joint_cmd_from_planner(rt_panel_command, rt_planner_state)
         else:
             rt_panel_command.target_type = ControlType.POSITION
             rt_panel_command.actuator_mode = ControlType.POSITION
             rt_panel_command.force_control = RtForceControlMode.NONE
-            rt_panel_command.joint_cmd = rt_planner_state.joint_pos
-        rt_panel_command.need_setting_update = True if prev_force_control != rt_panel_command.force_control else False
+            _snapshot_joint_cmd_from_planner(rt_panel_command, rt_planner_state)
+        settings_changed = (
+            prev_force_control != rt_panel_command.force_control
+            or prev_target_type != rt_panel_command.target_type
+            or prev_actuator_mode != rt_panel_command.actuator_mode
+            or prev_motion_type != rt_panel_command.motion_type
+        )
+        rt_panel_command.need_setting_update = settings_changed
     return True, "Success"
     
 def connect_to_hardware(robot_id, payload):
@@ -386,7 +405,7 @@ def connect_to_hardware(robot_id, payload):
         rt_panel_command.force_control = RtForceControlMode.NONE
         rt_panel_command.target_type = ControlType.POSITION
         rt_panel_command.actuator_mode = ControlType.POSITION
-        rt_panel_command.joint_cmd = rt_planner_state.joint_pos
+        _snapshot_joint_cmd_from_planner(rt_panel_command, rt_planner_state)
         rt_panel_command.need_setting_update = True
     return True, "Success"
 
