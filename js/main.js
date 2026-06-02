@@ -38,6 +38,7 @@ import {
 } from "./urdf-loader-wrapper.js";
 import { formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
+import { initFullscreen } from "./fullscreen.js";
 import * as THREE from "three";
 
 /* ----------6---------------------------------------------------------------- */
@@ -1042,6 +1043,7 @@ function bindButtons() {
   };
 
   teach.bindTeachButtons();
+  initFullscreen();
 
    // Robot Manager floating panel toggle
   const mgrBtn = document.getElementById("openRobotManagerBtn");
