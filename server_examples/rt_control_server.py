@@ -8,7 +8,6 @@ import threading
 import time
 import traceback
 import os, sys, platform
-from turtle import update
 
 repo_path = os.path.dirname(os.path.dirname(__file__))
 parent_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
