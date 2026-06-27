@@ -17,7 +17,7 @@ A GitHub Pages friendly robot GUI with these pieces already wired together:
 
 - `index.html`, `styles.css`: UI layout and styling
 - `js/`: viewer, UI, IK, planner, teach, storage, gateway API adapter
-- `assets/urdf/simple6dof/`: sample URDF for preview
+- `urdf/spark2.urdf`: default Spark2 URDF for preview and control
 - `server_examples/robot_gateway_server.py`: tiny local HTTP gateway example
 - `.nojekyll`: allows GitHub Pages to serve files directly
 

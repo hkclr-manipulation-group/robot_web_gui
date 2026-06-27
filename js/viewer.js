@@ -232,7 +232,7 @@ export class RobotViewer {
 
     this.scene.add(this.target);
 
-    // this.transform.attach(this.target);
+    this.transform.attach(this.target);
 
   }
 
@@ -398,41 +398,33 @@ export class RobotViewer {
 
   /* ---------------- External pose update ---------------- */
 
-updateTargetPose(pose) {
+  updateTargetPose(pose) {
+    if (!pose) return;
 
-  // if (!pose) return;
+    this._lock = true;
 
-  // this._lock = true;
+    if (pose.position && pose.quaternion) {
+      this.target.position.copy(pose.position);
+      this.target.quaternion.copy(pose.quaternion);
+    } else if (pose.x !== undefined) {
+      this.target.position.set(
+        pose.x || 0,
+        pose.y || 0,
+        pose.z || 0
+      );
 
-  // // SE3 pose
-  // if (pose.position && pose.quaternion) {
+      const euler = new THREE.Euler(
+        pose.rx || 0,
+        pose.ry || 0,
+        pose.rz || 0,
+        "XYZ"
+      );
 
-  //   this.target.position.copy(pose.position);
-  //   this.target.quaternion.copy(pose.quaternion);
+      this.target.quaternion.setFromEuler(euler);
+    }
 
-  // }
-  // // xyz + rpy pose
-  // else if (pose.x !== undefined) {
-
-  //   this.target.position.set(
-  //     pose.x || 0,
-  //     pose.y || 0,
-  //     pose.z || 0
-  //   );
-
-  //   const euler = new THREE.Euler(
-  //     pose.rx || 0,
-  //     pose.ry || 0,
-  //     pose.rz || 0
-  //   );
-
-  //   this.target.quaternion.setFromEuler(euler);
-
-  // }
-
-  // this._lock = false;
-
-}
+    this._lock = false;
+  }
 
   setLabMarkers(markers = {}) {
 

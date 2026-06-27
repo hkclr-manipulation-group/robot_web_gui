@@ -971,6 +971,62 @@ body.is-pseudo-fullscreen .layout {
 }
 
 @media (max-width: 820px) {
+  html, body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  body {
+    background-attachment: fixed;
+  }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100dvh - (var(--local-gap) * 2));
+    overflow: visible;
+    padding: var(--local-gap);
+    border-radius: 12px;
+  }
+
+  .viewer-panel {
+    flex: 0 0 auto;
+    min-height: 58dvh;
+    height: 58dvh;
+  }
+
+  #viewer {
+    min-height: 0;
+  }
+
+  .sidebar {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: var(--space) 0 0;
+  }
+
+  #tabPages,
+  .tab-page.active,
+  .tab-page.active .joint-list,
+  .tab-page.active #taskSpaceContainer {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .joint-list,
+  #taskSpaceContainer {
+    overflow: visible;
+  }
+
+  .joint-card {
+    flex: 0 0 auto;
+    min-height: 112px;
+    padding: 16px 12px;
+  }
+
   .topbar { flex-direction: column; align-items: stretch; }
   .top-actions { grid-template-columns: 1fr; }
   .task-row, .joint-controls, .planner-grid, .button-grid, .task-actions { grid-template-columns: 1fr; }
@@ -980,11 +1036,25 @@ body.is-pseudo-fullscreen .layout {
   
   /* Further adjust EE Pose Card for mobile */
   .ee-pose-card {
-    position: relative;
-    top: auto;
-    right: auto;
-    margin: 12px 16px;
-    min-width: auto;
+    top: 72px;
+    right: 8px;
+    min-width: 148px;
+    max-width: 42vw;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .ee-pose-content {
+    padding: 10px 12px;
+  }
+
+  .ee-pose-coordinate {
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .ee-pose-value {
+    font-size: 13px;
   }
 }
 

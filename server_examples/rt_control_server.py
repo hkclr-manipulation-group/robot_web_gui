@@ -33,7 +33,7 @@ sys.path.append(lib_path)
 import config_loader # cuarm_configuration.share.python.lib
 
 ROBOTS = {
-    "arm_v1": {"ip": "192.168.1.10", "port": 10001},
+    "spark2": {"ip": "192.168.1.10", "port": 10001},
     "preview-arm": {"ip": "preview", "port": 0},
 }
 rt_planner_state = None
@@ -262,7 +262,7 @@ def move_joint(robot_id, payload):
     global rt_panel_command
     if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
 
-    if robot_id == "arm_v1":
+    if robot_id == "spark2":
         joint_values = payload.get("joint_values", None)
         if joint_values is not None and len(joint_values) > 0:
             _apply_move_joint_interpolation(rt_panel_command, payload)
@@ -285,8 +285,8 @@ def move_pose(robot_id, payload):
     global rt_panel_command
     if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
 
-    # 🔧 支持 arm_v1
-    if robot_id == "arm_v1":
+    # 支持 Spark2
+    if robot_id == "spark2":
         pose_values = payload.get("pose_values", None)
         if pose_values is not None and len(pose_values) >= 6:
             # 🔧 切换到任务空间控制模式
@@ -317,8 +317,8 @@ def move_pose_incremental(robot_id, payload):
     global rt_panel_command
     if rt_panel_command.force_control != RtForceControlMode.NONE: return False, "Disable teach mode first."
 
-    # 🔧 支持 arm_v1
-    if robot_id == "arm_v1":
+    # 支持 Spark2
+    if robot_id == "spark2":
         pose_delta_values = payload.get("pose_delta_values", None)
         if pose_delta_values is not None and len(pose_delta_values) >= 6:
             # 🔧 切换到任务空间控制模式
@@ -368,7 +368,7 @@ def enable_teach(robot_id, payload):
     if not _ensure_planner_state():
         return False, _NO_PLANNER_STATE_MSG
     
-    if robot_id == "arm_v1":
+    if robot_id == "spark2":
         prev_force_control = rt_panel_command.force_control
         prev_target_type = rt_panel_command.target_type
         prev_actuator_mode = rt_panel_command.actuator_mode
@@ -399,7 +399,7 @@ def connect_to_hardware(robot_id, payload):
     global rt_panel_command, rt_planner_state
     if not _ensure_planner_state():
         return False, _NO_PLANNER_STATE_MSG
-    if robot_id == "arm_v1":
+    if robot_id == "spark2":
         rt_panel_command.simulation = False if payload.get("enable", False) else True
         rt_panel_command.force_control = RtForceControlMode.NONE
         rt_panel_command.target_type = ControlType.POSITION
@@ -533,7 +533,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     
 if __name__ == "__main__":
-    config_path = parent_path + "/cuarm_configuration/arm_v1/config.yaml"
+    config_path = parent_path + "/cuarm_configuration/spark2/config.yaml"
     initialize_panel_command(config_path, rt_panel_command)
     panel_ip, panel_port, rt_ip, rt_port, recv_delay_ms = load_panel_udp_endpoints(config_path)
     udp = CuarmUdpThread(

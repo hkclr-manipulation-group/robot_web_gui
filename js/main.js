@@ -228,6 +228,52 @@ function getCurrentPose() {
   return kinematics.getEndEffectorPose();
 }
 
+function poseRadToUiDeg(pose) {
+  if (!pose) return null;
+  return {
+    x: pose.x,
+    y: pose.y,
+    z: pose.z,
+    rx: THREE.MathUtils.radToDeg(pose.rx || 0),
+    ry: THREE.MathUtils.radToDeg(pose.ry || 0),
+    rz: THREE.MathUtils.radToDeg(pose.rz || 0),
+  };
+}
+
+function poseUiDegToRad(pose) {
+  if (!pose) return null;
+  return {
+    x: pose.x,
+    y: pose.y,
+    z: pose.z,
+    rx: THREE.MathUtils.degToRad(pose.rx || 0),
+    ry: THREE.MathUtils.degToRad(pose.ry || 0),
+    rz: THREE.MathUtils.degToRad(pose.rz || 0),
+  };
+}
+
+function poseToArray(pose) {
+  return [pose.x, pose.y, pose.z, pose.rx, pose.ry, pose.rz];
+}
+
+function transformPoseToRobotPose(transformPose) {
+  if (!transformPose) return null;
+
+  if (transformPose.position && transformPose.quaternion) {
+    const euler = new THREE.Euler().setFromQuaternion(transformPose.quaternion, "XYZ");
+    return {
+      x: transformPose.position.x,
+      y: transformPose.position.y,
+      z: transformPose.position.z,
+      rx: euler.x,
+      ry: euler.y,
+      rz: euler.z,
+    };
+  }
+
+  return transformPose.x !== undefined ? transformPose : null;
+}
+
 function updateConnectionUi(kind = "preview") {
   const apiState = getApiState();
   const robotInfo =
@@ -274,6 +320,8 @@ function refreshPoseReadout() {
 
   // eePoseEl.textContent = formatPoseText(pose);
 
+  updateEePoseCard([pose.x, pose.y, pose.z]);
+
   viewer.updateTargetPose(pose);
 
 }
@@ -287,7 +335,7 @@ function syncViewerFromRobot() {
 function syncTaskUiFromRobot() {
   if (!kinematics) return;
   const pose = kinematics.getEndEffectorPose();
-  taskUI.setPose(pose);
+  taskUI.setPose(poseRadToUiDeg(pose));
 }
 
 function syncViewerFromStreamData(position, quaternion) {
@@ -307,7 +355,7 @@ function syncMeta() {
   if (!pose) return;
 
   refreshPoseReadout();
-  taskUI.setPose(pose);
+  taskUI.setPose(poseRadToUiDeg(pose));
 
 }
 
@@ -339,15 +387,16 @@ function applyJointVector(q, options = {}) {
 
     noteGhostShowsCommandAheadOfTelemetry();
 
-    // refreshPoseReadout();
+    kinematics.setJointMap(map);
+    refreshPoseReadout();
 
-    // if (syncTaskUi) {
-    //   syncTaskUiFromRobot();
-    // }
+    if (syncTaskUi) {
+      syncTaskUiFromRobot();
+    }
 
-    // if (syncViewer) {
-    //   syncViewerFromRobot();
-    // }
+    if (syncViewer) {
+      syncViewerFromRobot();
+    }
   });
 
   return true;
@@ -406,8 +455,10 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
 
     // 实时下发命令到机器人（先发送命令，成功后再更新UI）
     try {
-      const jointNames = Object.keys(kinematics.getCurrentJointMap());
-      const jointValues = Object.values(kinematics.getCurrentJointMap());
+      const commandMap = kinematics.getCurrentJointMap();
+      commandMap[name] = value;
+      const jointNames = Object.keys(commandMap);
+      const jointValues = Object.values(commandMap);
       console.log(`[onJointInput] ${name}: Sending real-time command with value=${value.toFixed(6)} rad (${(value * 180 / Math.PI).toFixed(2)}°)`);
       
       const result = await sendJointCommand(
@@ -474,6 +525,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
     
     map[name] = value; // 确保使用最新的目标值
     
+    kinematics.setJointMap(map);
     refreshPoseReadout();
     syncTaskUiFromRobot();
     syncViewerFromRobot();
@@ -517,11 +569,24 @@ const kinematicsLab = new KinematicsLab(kinematicsLabContainerEl, {
 const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onReadCurrent: () => {
     if (!kinematics) return;
-    taskUI.setPose(kinematics.getEndEffectorPose());
+    taskUI.setPose(poseRadToUiDeg(kinematics.getEndEffectorPose()));
   },
 
   onMove: async (pose) => {
     if (!kinematics || isSyncing) return;
+
+    const targetPose = poseUiDegToRad(pose);
+    const ok = applyTaskPoseByIK(targetPose, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+      setAsLastGoal: true,
+    });
+
+    if (!ok) {
+      setStatus("IK solve failed for task move.", "warn");
+      return;
+    }
 
     // 🔧 选项1：通过 IK 求解并发送关节命令
     // const ok = applyTaskPoseByIK(pose, {
@@ -537,12 +602,11 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     // 🔧 选项2：直接发送任务空间命令到后端
     
     try {
-      console.log(`[TaskSpace onMove] Sending absolute pose command:`, pose);
-      const poseArray = [pose.x, pose.y, pose.z, pose.rx, pose.ry, pose.rz];
-      const result = await sendPoseCommand(poseArray);
+      console.log(`[TaskSpace onMove] Sending absolute pose command:`, targetPose);
+      const result = await sendPoseCommand(poseToArray(targetPose));
       
       if (result.mode === "preview") {
-        console.warn(`[TaskSpace onMove] Preview mode - no gateway configured`);
+        setStatus("Preview task-space move applied locally.", "warn");
       } else if (result.data && result.data.success) {
         console.log(`[TaskSpace onMove] ✅ Absolute pose command succeeded`);
         setStatus("Task-space absolute command sent.", "ok");
@@ -560,13 +624,33 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onMoveIncremental: async (deltaPose) => {
     if (!kinematics || isSyncing) return;
 
+    const targetPose = poseUiDegToRad(taskUI.getPose());
+    const deltaPoseRad = {
+      x: deltaPose.x || 0,
+      y: deltaPose.y || 0,
+      z: deltaPose.z || 0,
+      rx: THREE.MathUtils.degToRad(deltaPose.rx || 0),
+      ry: THREE.MathUtils.degToRad(deltaPose.ry || 0),
+      rz: THREE.MathUtils.degToRad(deltaPose.rz || 0),
+    };
+    const ok = applyTaskPoseByIK(targetPose, {
+      syncJointUi: true,
+      syncTaskUi: false,
+      syncViewer: true,
+      setAsLastGoal: true,
+    });
+
+    if (!ok) {
+      setStatus("IK solve failed for task jog.", "warn");
+      return;
+    }
+
     try {
-      console.log(`[TaskSpace onMoveIncremental] Sending incremental pose command:`, deltaPose);
-      const deltaPoseArray = [deltaPose.x, deltaPose.y, deltaPose.z, deltaPose.rx, deltaPose.ry, deltaPose.rz];
-      const result = await sendPoseIncrementalCommand(deltaPoseArray);
+      console.log(`[TaskSpace onMoveIncremental] Sending incremental pose command:`, deltaPoseRad);
+      const result = await sendPoseIncrementalCommand(poseToArray(deltaPoseRad));
       
       if (result.mode === "preview") {
-        console.warn(`[TaskSpace onMoveIncremental] Preview mode - no gateway configured`);
+        setStatus("Preview task-space jog applied locally.", "warn");
       } else if (result.data && result.data.success) {
         console.log(`[TaskSpace onMoveIncremental] ✅ Incremental pose command succeeded`);
         setStatus("Task-space incremental command sent.", "ok");
@@ -581,7 +665,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   },
 
   onSetGoal: (pose) => {
-    lastGoalPose = pose;
+    lastGoalPose = poseUiDegToRad(pose);
     setStatus("Task-space goal snapshot captured.", "ok");
   },
 
@@ -604,7 +688,12 @@ taskUI.build();
 viewer.callbacks.onTaskMove = (pose) => {
   if (!kinematics || isSyncing) return;
 
-  const ok = applyTaskPoseByIK(pose, {
+  const targetPose = transformPoseToRobotPose(pose);
+  if (!targetPose) return;
+
+  taskUI.setPose(poseRadToUiDeg(targetPose));
+
+  const ok = applyTaskPoseByIK(targetPose, {
     syncJointUi: true,
     syncTaskUi: true,
     syncViewer: false, // viewer 自己已经在这个 pose 上了
@@ -1259,10 +1348,16 @@ function updateEePoseCard(position) {
   populateRobotSelector();
 
   const savedGateway = localStorage.getItem(STORAGE_KEYS.gatewayUrl) || "";
+  const storedRobotId = localStorage.getItem(STORAGE_KEYS.robotId);
   const savedRobotId =
-    localStorage.getItem(STORAGE_KEYS.robotId) || DEFAULT_ROBOTS[0].id;
+    storedRobotId === "arm_v1"
+      ? "spark2"
+      : (storedRobotId || DEFAULT_ROBOTS[0].id);
+  const storedUrdf = localStorage.getItem(STORAGE_KEYS.lastUrdfPath);
   const savedUrdf =
-    localStorage.getItem(STORAGE_KEYS.lastUrdfPath) || DEFAULT_URDF_PATH;
+    storedUrdf === "./urdf/arm_v1/robot.urdf"
+      ? DEFAULT_URDF_PATH
+      : (storedUrdf || DEFAULT_URDF_PATH);
   const savedTraj = localStorage.getItem(STORAGE_KEYS.lastTrajectory);
 
   gatewayUrlEl.value = savedGateway;
