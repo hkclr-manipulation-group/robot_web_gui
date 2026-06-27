@@ -152,7 +152,7 @@ const JOINT_ALIGNMENT_TOL_RAD = 0.04;
 
 function applyGhostRobotVisibility(desiredVisible) {
   const show =
-    VIEWER.showGhostRobot && !teachTabActive && !!desiredVisible;
+    VIEWER.showGhostRobot && !!desiredVisible;
   viewer.setGhostRobotVisible(show);
 }
 
@@ -827,6 +827,7 @@ async function executeTrajectory(trajectory) {
       syncTaskUi: true,
       syncViewer: true,
     });
+    teach.syncTeachJointMirror(map);
 
     const teachInterp =
       i === 0
@@ -847,7 +848,7 @@ async function executeTrajectory(trajectory) {
 
       // Wait for first waypoint convergence before dispatching remaining waypoints.
       if (result.mode === "preview") {
-        await sleep(timeoutMs);
+        await sleep(getPlayDelay());
       } else {
         const reached = await waitUntilTargetReached(map, timeoutMs);
         if (!reached) {
@@ -1209,7 +1210,7 @@ function bindCardTabs() {
       viewerPanelEl?.classList.toggle("teach-active", teachActive);
       if (teachActive) {
         teach.syncTeachJointMirror();
-        applyGhostRobotVisibility(false);
+        applyGhostRobotVisibility(true);
       } else if (latestJointPosition?.length) {
         refreshGhostVersusTelemetry(latestJointPosition);
       } else {

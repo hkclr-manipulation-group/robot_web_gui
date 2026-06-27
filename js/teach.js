@@ -1,6 +1,17 @@
 import { STORAGE_KEYS, TEACH } from "./config.js";
 import { enableTeachModeApi } from "./api.js";
 
+function formatJointValue(value) {
+  return `${((Number(value) || 0) * 180 / Math.PI).toFixed(2)}°`;
+}
+
+function jointProgress(value) {
+  const min = -Math.PI;
+  const max = Math.PI;
+  const pct = ((Number(value) || 0) - min) / (max - min);
+  return `${Math.max(0, Math.min(1, pct)) * 100}%`;
+}
+
 export class TeachSystem {
   constructor() {
     this.poses = [];
@@ -91,9 +102,54 @@ export function createTeachModule(options) {
     setTeachButtonState(teachStopBtnEl, canStop);
   }
 
-  function syncTeachJointMirror() {
-    if (!jointContainerTeachEl || !jointContainerEl) return;
-    jointContainerTeachEl.innerHTML = jointContainerEl.innerHTML;
+  function syncTeachJointMirror(jointMap = null) {
+    if (!jointContainerTeachEl) return;
+
+    const map = jointMap || getRecordJointMap();
+    if (!map) {
+      jointContainerTeachEl.innerHTML = "";
+      return;
+    }
+
+    const entries = Object.entries(map).reverse();
+    const fragment = document.createDocumentFragment();
+
+    entries.forEach(([name, value]) => {
+      const card = document.createElement("div");
+      card.className = "joint-card teach-joint-card";
+
+      const top = document.createElement("div");
+      top.className = "joint-top";
+
+      const nameEl = document.createElement("div");
+      nameEl.className = "joint-name";
+      nameEl.textContent = name;
+
+      const valueEl = document.createElement("div");
+      valueEl.className = "joint-value";
+      valueEl.textContent = formatJointValue(value);
+
+      const progressWrap = document.createElement("div");
+      progressWrap.className = "progress-wrap";
+
+      const progressTrack = document.createElement("div");
+      progressTrack.className = "progress-track";
+
+      const progressFill = document.createElement("div");
+      progressFill.className = "progress-fill";
+      progressFill.style.width = jointProgress(value);
+
+      progressTrack.appendChild(progressFill);
+      progressWrap.appendChild(progressTrack);
+
+      top.appendChild(nameEl);
+      top.appendChild(valueEl);
+      card.appendChild(top);
+      card.appendChild(progressWrap);
+      fragment.appendChild(card);
+    });
+
+    jointContainerTeachEl.replaceChildren(fragment);
   }
 
   async function enableTeachMode(enable) {

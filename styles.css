@@ -703,6 +703,20 @@ body.is-pseudo-fullscreen .layout {
   padding-top: calc(var(--space) + 10px);
 }
 
+.teach-joint-card {
+  flex: 0 0 auto;
+  min-height: 68px;
+  padding: 14px 16px;
+}
+
+.teach-joint-card .joint-top {
+  margin-bottom: 10px;
+}
+
+.teach-joint-card .joint-name {
+  transform: none;
+}
+
 /* Make taskSpaceContainer fill available vertical space too */
 .tab-page.active #taskSpaceContainer {
   flex: 1 1 auto;
@@ -994,8 +1008,8 @@ body.is-pseudo-fullscreen .layout {
 
   .viewer-panel {
     flex: 0 0 auto;
-    min-height: 58dvh;
-    height: 58dvh;
+    min-height: 46dvh;
+    height: 46dvh;
   }
 
   #viewer {
@@ -1023,13 +1037,95 @@ body.is-pseudo-fullscreen .layout {
 
   .joint-card {
     flex: 0 0 auto;
-    min-height: 112px;
-    padding: 16px 12px;
+    min-height: 76px;
+    padding: 10px 10px;
+    border-radius: 12px;
+  }
+
+  .joint-list,
+  #taskSpaceContainer {
+    gap: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  #jointContainerTeach.joint-list {
+    padding-top: 8px;
+  }
+
+  .joint-top {
+    margin-bottom: 6px;
+    gap: 6px;
+  }
+
+  .joint-name {
+    font-size: 13px;
+    transform: none;
+  }
+
+  .joint-value {
+    font-size: 13px;
+  }
+
+  .joint-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(86px, 0.8fr);
+    gap: 8px;
+  }
+
+  .slider-wrap {
+    min-height: 42px;
+    height: 42px;
+  }
+
+  .slider-large {
+    max-width: 180px;
+    height: 48px;
+    --slider-input-h: 48px;
+    --slider-track-h: 28px;
+    --slider-thumb-h: 40px;
+  }
+
+  .slider-large::-webkit-slider-runnable-track {
+    height: 28px;
+  }
+
+  .slider-large::-moz-range-track {
+    height: 28px;
+  }
+
+  .slider-large::-webkit-slider-thumb {
+    width: 40px;
+    height: 40px;
+    margin-top: -6px;
+    margin-top: calc((var(--slider-track-h) - var(--slider-thumb-h)) / 2);
+  }
+
+  .slider-large::-moz-range-thumb {
+    width: 40px;
+    height: 40px;
+  }
+
+  @supports selector(::-webkit-slider-thumb) {
+    .slider-wrap .slider-large {
+      transform: translateY(-6px);
+    }
+  }
+
+  .progress-track {
+    height: 6px;
+  }
+
+  .range-labels {
+    margin-top: 4px;
+  }
+
+  .range-label {
+    font-size: 10px;
   }
 
   .topbar { flex-direction: column; align-items: stretch; }
   .top-actions { grid-template-columns: 1fr; }
-  .task-row, .joint-controls, .planner-grid, .button-grid, .task-actions { grid-template-columns: 1fr; }
+  .task-row, .planner-grid, .button-grid, .task-actions { grid-template-columns: 1fr; }
   .meta-grid { grid-template-columns: 1fr; }
   .viewer-buttons { justify-content: flex-start; }
   .pose-bar { flex-direction: column; align-items: flex-start; }
@@ -1316,9 +1412,9 @@ body.is-pseudo-fullscreen .layout {
 
   .teach-control-bar {
     /* 原约 (100% - 24px) 的 1/3 */
-    width: min(calc((100% - 24px) / 3), 280px);
+    width: min(260px, calc(100% - 96px));
     bottom: 108px;
-    padding: 6px 10px;
+    padding: 6px 18px;
   }
 
   .tab-label {
