@@ -8,12 +8,42 @@ export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+/** Snap tiny values and -0 to 0 so UI does not flicker between "0.00" and "-0.00". */
+export function normalizeDisplayZero(value, displayDecimals = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  const epsilon = 0.5 * 10 ** -displayDecimals;
+  if (Math.abs(n) <= epsilon) return 0;
+  return Object.is(n, -0) ? 0 : n;
+}
+
 export function formatJointValue(value, isPrismatic = false) {
-  return isPrismatic ? `${Number(value).toFixed(4)} m` : `${THREE.MathUtils.radToDeg(Number(value)).toFixed(2)}°`;
+  if (isPrismatic) {
+    const n = normalizeDisplayZero(Number(value), 4);
+    return `${n.toFixed(4)} m`;
+  }
+  const deg = normalizeDisplayZero(THREE.MathUtils.radToDeg(Number(value)), 2);
+  return `${deg.toFixed(2)}°`;
 }
 
 export function formatJointInput(value, isPrismatic = false) {
-  return isPrismatic ? Number(value).toFixed(4) : THREE.MathUtils.radToDeg(Number(value)).toFixed(2);
+  if (isPrismatic) {
+    return String(normalizeDisplayZero(Number(value), 4).toFixed(4));
+  }
+  return String(normalizeDisplayZero(THREE.MathUtils.radToDeg(Number(value)), 2).toFixed(2));
+}
+
+export function formatTaskSpaceValue(value, isAngle = false) {
+  if (isAngle) {
+    const deg = normalizeDisplayZero(Number(value), 1);
+    return `${deg.toFixed(1)}°`;
+  }
+  return normalizeDisplayZero(Number(value), 4).toFixed(4);
+}
+
+/** End Effector Pose card (meters, 4 decimals). */
+export function formatEePoseValue(value) {
+  return formatTaskSpaceValue(value, false);
 }
 
 export function parseJointInput(value, isPrismatic = false) {
@@ -22,8 +52,7 @@ export function parseJointInput(value, isPrismatic = false) {
 }
 
 export function formatPoseText(pose) {
-  return `x=${pose.x.toFixed(3)} y=${pose.y.toFixed(3)} z=${pose.z.toFixed(3)} `;
-  // return `x=${pose.x.toFixed(3)} y=${pose.y.toFixed(3)} z=${pose.z.toFixed(3)} r=${THREE.MathUtils.radToDeg(pose.rx).toFixed(1)} p=${THREE.MathUtils.radToDeg(pose.ry).toFixed(1)} y=${THREE.MathUtils.radToDeg(pose.rz).toFixed(1)}`;
+  return `x=${formatEePoseValue(pose.x)} y=${formatEePoseValue(pose.y)} z=${formatEePoseValue(pose.z)} `;
 }
 
 export function sleep(ms) {
@@ -48,6 +77,89 @@ export function quaternionToPose(position, quaternion) {
   const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
   const pos = new THREE.Vector3(position[0], position[1], position[2]);
   return poseToObject(pos, euler);
+}
+
+const _streamTempQuat = new THREE.Quaternion();
+const _streamTempEuler = new THREE.Euler();
+/** Reject per-frame Euler branch flips when orientation barely changed (Qt uses quat in state panel). */
+const STREAM_ORIENTATION_STABLE_RAD = THREE.MathUtils.degToRad(0.05);
+
+function unwrapEulerDeg(next, prev) {
+  const unwrap = (value, reference) => {
+    let v = value;
+    while (v - reference > 180) v -= 360;
+    while (v - reference < -180) v += 360;
+    return v;
+  };
+  return {
+    rx: unwrap(next.rx, prev.rx),
+    ry: unwrap(next.ry, prev.ry),
+    rz: unwrap(next.rz, prev.rz),
+  };
+}
+
+/**
+ * Build a stream helper that converts gateway EE telemetry into stable TaskSpaceUI degrees.
+ * Gateway format: [x, y, z, qw, qx, qy, qz].
+ */
+export function createStreamEulerStabilizer() {
+  let lastQuat = null;
+  let lastEulerDeg = null;
+
+  function taskPoseDegFromStream(eePose) {
+    const x = eePose[0];
+    const y = eePose[1];
+    const z = eePose[2];
+    let rx = 0;
+    let ry = 0;
+    let rz = 0;
+
+    if (eePose.length >= 7) {
+      _streamTempQuat.set(eePose[4], eePose[5], eePose[6], eePose[3]);
+
+      if (lastQuat) {
+        const dot = Math.abs(_streamTempQuat.dot(lastQuat));
+        const angle = 2 * Math.acos(Math.min(1, dot));
+        if (angle < STREAM_ORIENTATION_STABLE_RAD && lastEulerDeg) {
+          return { x, y, z, ...lastEulerDeg };
+        }
+      }
+
+      _streamTempEuler.setFromQuaternion(_streamTempQuat, 'XYZ');
+      const next = {
+        rx: THREE.MathUtils.radToDeg(_streamTempEuler.x),
+        ry: THREE.MathUtils.radToDeg(_streamTempEuler.y),
+        rz: THREE.MathUtils.radToDeg(_streamTempEuler.z),
+      };
+      const stable = lastEulerDeg ? unwrapEulerDeg(next, lastEulerDeg) : next;
+      lastQuat = _streamTempQuat.clone();
+      lastEulerDeg = stable;
+      rx = stable.rx;
+      ry = stable.ry;
+      rz = stable.rz;
+    } else if (eePose.length >= 6) {
+      const next = {
+        rx: THREE.MathUtils.radToDeg(eePose[3]),
+        ry: THREE.MathUtils.radToDeg(eePose[4]),
+        rz: THREE.MathUtils.radToDeg(eePose[5]),
+      };
+      const stable = lastEulerDeg ? unwrapEulerDeg(next, lastEulerDeg) : next;
+      lastEulerDeg = stable;
+      rx = stable.rx;
+      ry = stable.ry;
+      rz = stable.rz;
+      lastQuat = null;
+    }
+
+    return { x, y, z, rx, ry, rz };
+  }
+
+  function reset() {
+    lastQuat = null;
+    lastEulerDeg = null;
+  }
+
+  return { taskPoseDegFromStream, reset };
 }
 
 export function quaternionError(targetQ, currentQ) {

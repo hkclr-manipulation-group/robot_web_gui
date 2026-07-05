@@ -36,7 +36,7 @@ import {
   cloneMaterialsPerMesh,
   loadRobotFromUrdf,
 } from "./urdf-loader-wrapper.js";
-import { formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
+import { createStreamEulerStabilizer, formatEePoseValue, formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import { initFullscreen } from "./fullscreen.js";
 import * as THREE from "three";
@@ -97,6 +97,8 @@ let lastGoalPose = null;
 const RETRY_DELAY = 3000;
 let robotStream = null; // EventSource for streaming robot data from gateway
 let robotStreamRetryTimer = null;
+let lastStreamError = "";
+const streamEulerStabilizer = createStreamEulerStabilizer();
 let latestJointPosition = null; // latest joint_pos from /stream
 
 /* -------------------------------------------------------------------------- */
@@ -1267,8 +1269,11 @@ function connectStream(url) {
   if (!gatewayUrl) {
     viewer.setHardwareRobotVisible(false);
     applyGhostRobotVisibility(true);
+    streamEulerStabilizer.reset();
     return;
   }
+
+  streamEulerStabilizer.reset();
 
   const normalizeStreamArray = (value) => {
     if (!Array.isArray(value)) return null;
@@ -1283,19 +1288,26 @@ function connectStream(url) {
       const eePose = normalizeStreamArray(data.ee_pose);
       const jointPosition = normalizeStreamArray(data.joint_pos);
 
+      if (data.connected === false) {
+        updateConnectionUi("danger");
+        if (data.error && data.error !== lastStreamError) {
+          lastStreamError = data.error;
+          setStatus(`Robot stream disconnected: ${data.error}`, "danger-text");
+        }
+      } else if (data.connected === true) {
+        if (lastStreamError) {
+          lastStreamError = "";
+          setStatus("Robot stream connected.", "ok");
+        }
+        updateConnectionUi("connect");
+      }
+
       if (eePose?.length >= 3) {
         updateEePoseCard(eePose.slice(0, 3));
         
-        // eePose 包含完整的6维位姿信息，同步到 TaskSpaceUI
+        // eePose: [x, y, z, qw, qx, qy, qz] — quaternion like Qt state panel (not raw Euler)
         if (eePose.length >= 6 && kinematics) {
-          const pose = {
-            x: eePose[0],
-            y: eePose[1],
-            z: eePose[2],
-            rx: THREE.MathUtils.radToDeg(eePose[3]),
-            ry: THREE.MathUtils.radToDeg(eePose[4]),
-            rz: THREE.MathUtils.radToDeg(eePose[5])
-          };
+          const pose = streamEulerStabilizer.taskPoseDegFromStream(eePose);
           taskUI.syncFromStreamData(pose);
         }
       }
@@ -1336,9 +1348,9 @@ function updateEePoseCard(position) {
   const eePoseYEl = document.getElementById("eePoseY");
   const eePoseZEl = document.getElementById("eePoseZ");
   
-  if (eePoseXEl) eePoseXEl.textContent = position[0].toFixed(4);
-  if (eePoseYEl) eePoseYEl.textContent = position[1].toFixed(4);
-  if (eePoseZEl) eePoseZEl.textContent = position[2].toFixed(4);
+  if (eePoseXEl) eePoseXEl.textContent = formatEePoseValue(position[0]);
+  if (eePoseYEl) eePoseYEl.textContent = formatEePoseValue(position[1]);
+  if (eePoseZEl) eePoseZEl.textContent = formatEePoseValue(position[2]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1351,12 +1363,12 @@ function updateEePoseCard(position) {
   const savedGateway = localStorage.getItem(STORAGE_KEYS.gatewayUrl) || "";
   const storedRobotId = localStorage.getItem(STORAGE_KEYS.robotId);
   const savedRobotId =
-    storedRobotId === "arm_v1"
+    storedRobotId === "spark"
       ? "spark2"
-      : (storedRobotId || DEFAULT_ROBOTS[0].id);
+      : (storedRobotId || (savedGateway ? "spark2" : DEFAULT_ROBOTS[0].id));
   const storedUrdf = localStorage.getItem(STORAGE_KEYS.lastUrdfPath);
   const savedUrdf =
-    storedUrdf === "./urdf/arm_v1/robot.urdf"
+    storedUrdf === "./urdf/spark/robot.urdf"
       ? DEFAULT_URDF_PATH
       : (storedUrdf || DEFAULT_URDF_PATH);
   const savedTraj = localStorage.getItem(STORAGE_KEYS.lastTrajectory);

@@ -1,9 +1,7 @@
 import { STORAGE_KEYS, TEACH } from "./config.js";
 import { enableTeachModeApi } from "./api.js";
 
-function formatJointValue(value) {
-  return `${((Number(value) || 0) * 180 / Math.PI).toFixed(2)}°`;
-}
+import { formatJointValue } from "./utils.js";
 
 function jointProgress(value) {
   const min = -Math.PI;

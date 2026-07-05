@@ -1,4 +1,4 @@
-export const DEFAULT_URDF_PATH = './urdf/spark2.urdf';
+export const DEFAULT_URDF_PATH = './urdf/spark2/robot.urdf';
 
 export const STORAGE_KEYS = {
   lastUrdfPath: 'robot-web-gui.lastUrdfPath',
@@ -9,8 +9,6 @@ export const STORAGE_KEYS = {
 
 export const DEFAULT_ROBOTS = [
   { id: 'preview-arm', name: 'Preview Arm', mode: 'preview', ip: '-', dof: 6 },
-  // { id: 'left-arm', name: 'Left Arm', mode: 'wifi', ip: '192.168.1.10', dof: 6 },
-  // { id: 'right-arm', name: 'Right Arm', mode: 'wifi', ip: '192.168.1.11', dof: 6 },
   { id: 'spark2', name: 'Spark2', mode: 'wifi', ip: '192.168.1.10', dof: 6 },
 ];
 

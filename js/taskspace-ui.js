@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { TASK_LIMITS } from "./config.js";
-import { clamp } from "./utils.js";
+import { clamp, formatTaskSpaceValue } from "./utils.js";
 
 const AXES = [
   { key: "x", label: "X", unit: "m", angle: false },
@@ -469,11 +469,7 @@ export class TaskSpaceUI {
   /* ---------------- helpers ---------------- */
 
   #formatValue(value, isAngle) {
-    if (isAngle) {
-      return `${value.toFixed(1)}°`;
-    } else {
-      return value.toFixed(4);
-    }
+    return formatTaskSpaceValue(value, isAngle);
   }
 
   #updateAxisUI(axisKey) {
