@@ -12,6 +12,8 @@ import {
   connectRobot,
   disconnectRobot,
   getApiState,
+  isHardwareControlActive,
+  isGatewayActive,
   pingGateway,
   sendHomeCommand,
   sendJointCommand,
@@ -81,6 +83,8 @@ const playDelayEl = document.getElementById("playDelay");
 
 /** URDF tuned from commands / IK (lighter “ghost”). */
 let robotGhost = null;
+/** User issued a joint/task command not yet matched by telemetry (ghost = target). */
+let ghostCommandPending = false;
 /** Teach tab (`planning` page) active — ghost robot stays hidden while true. */
 let teachTabActive = false;
 /** Duplicate URDF driven by streamed joint telemetry (full materials). */
@@ -177,23 +181,68 @@ function telemetryMatchesGhostCommand(telemJoint) {
 
 /** 有新的关节指令或 IK 轨迹时调用：在真实硬件与指令未对齐前先显示仿真臂 */
 function noteGhostShowsCommandAheadOfTelemetry() {
+  ghostCommandPending = true;
   if (robotHardware?.visible) {
     applyGhostRobotVisibility(true);
   }
 }
 
+/** 无用户目标时：ghost / 指令状态跟遥测对齐（连接后不应留在 URDF 零位）。 */
+function syncCommandStateFromTelemetry(telemJoint, options = {}) {
+  if (!kinematics || !robotGhost || !telemJoint?.length) return;
+
+  const { syncJointUi = true } = options;
+  const names = kinematics.getJointNames();
+  const q = telemJoint.slice(0, names.length);
+
+  withSyncGuard(() => {
+    applyJointVectorToUrdfRobot(robotGhost, q);
+    kinematics.setJointVector(q);
+    if (syncJointUi) {
+      jointsUI.syncFromStreamData(q, { updateGhostUrdfJoints: false });
+    }
+    refreshPoseReadout();
+    syncTaskUiFromRobot();
+  });
+}
+
 /**
- * joint_pos 刷新：hardware 网格 + 面板；仿真臂在未对齐指令前不被遥测拉回，对齐后隐藏并入位。
+ * joint_pos 刷新：hardware 网格 + 面板；有 pending 目标时 ghost 显示指令，否则跟遥测重合并隐藏。
  */
 function refreshGhostVersusTelemetry(telemJoint) {
   if (!kinematics || !robotGhost) return;
 
   const hardwareActive = !!(robotHardware && robotHardware.visible);
+
+  if (!ghostCommandPending) {
+    syncCommandStateFromTelemetry(telemJoint, { syncJointUi: !isSyncing });
+    applyGhostRobotVisibility(false);
+    return;
+  }
+
   const aligned = telemetryMatchesGhostCommand(telemJoint);
   const updateGhostUrdfJoints = !hardwareActive || aligned;
 
   jointsUI.syncFromStreamData(telemJoint, { updateGhostUrdfJoints });
   applyGhostRobotVisibility(hardwareActive ? !aligned : true);
+
+  if (aligned) {
+    ghostCommandPending = false;
+  }
+}
+
+function isLocalPreviewOnly() {
+  return !isGatewayActive();
+}
+
+function applyLocalJointMap(map) {
+  withSyncGuard(() => {
+    kinematics.setJointMap(map);
+    refreshPoseReadout();
+    syncTaskUiFromRobot();
+    syncViewerFromRobot();
+    noteGhostShowsCommandAheadOfTelemetry();
+  });
 }
 
 function vectorToMap(q) {
@@ -455,10 +504,16 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
   onJointInput: async (name, value) => {
     if (!kinematics || isSyncing) return;
 
+    const commandMap = kinematics.getCurrentJointMap();
+    commandMap[name] = value;
+
+    if (isLocalPreviewOnly()) {
+      applyLocalJointMap({ ...commandMap });
+      return;
+    }
+
     // 实时下发命令到机器人（先发送命令，成功后再更新UI）
     try {
-      const commandMap = kinematics.getCurrentJointMap();
-      commandMap[name] = value;
       const jointNames = Object.keys(commandMap);
       const jointValues = Object.values(commandMap);
       console.log(`[onJointInput] ${name}: Sending real-time command with value=${value.toFixed(6)} rad (${(value * 180 / Math.PI).toFixed(2)}°)`);
@@ -471,19 +526,9 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       
       if (result.mode === "preview") {
         console.warn(`[onJointInput] ${name}: Preview mode - no gateway configured`);
-        // Preview 模式下仍然更新 UI
-        withSyncGuard(() => {
-          const currentMap = kinematics.getCurrentJointMap();
-          currentMap[name] = value;
-          kinematics.setJointMap(currentMap);
-          refreshPoseReadout();
-          syncTaskUiFromRobot();
-          syncViewerFromRobot();
-          noteGhostShowsCommandAheadOfTelemetry();
-        });
+        applyLocalJointMap({ ...commandMap });
       } else if (result.data && result.data.success) {
         console.log(`[onJointInput] ${name}: ✅ Real-time command succeeded`);
-        // 成功后更新 UI
         withSyncGuard(() => {
           const currentMap = kinematics.getCurrentJointMap();
           currentMap[name] = value;
@@ -493,6 +538,9 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
           syncViewerFromRobot();
           noteGhostShowsCommandAheadOfTelemetry();
         });
+        if (!isHardwareControlActive()) {
+          setStatus("Simulation: joint command sent to rt_control.", "ok");
+        }
       } else if (result.data && !result.data.success) {
         console.error(`[onJointInput] ${name}: ❌ Command failed: ${result.data.message}`);
         setStatus(`Failed to move joint: ${result.data.message}`, "danger-text");
@@ -527,6 +575,12 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
     
     map[name] = value; // 确保使用最新的目标值
     
+    if (isLocalPreviewOnly()) {
+      applyLocalJointMap({ ...map });
+      setStatus("Local preview: joint command applied (no gateway).", "warn");
+      return;
+    }
+
     kinematics.setJointMap(map);
     refreshPoseReadout();
     syncTaskUiFromRobot();
@@ -544,7 +598,12 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
       if (result.mode === "preview") {
         setStatus("Preview mode active. No gateway configured.", "warn");
       } else if (result.data && result.data.success) {
-        setStatus("Successfully sent joint command.", "ok");
+        setStatus(
+          isHardwareControlActive()
+            ? "Successfully sent joint command."
+            : "Simulation: joint command sent to rt_control.",
+          "ok"
+        );
         console.log(`[onJointCommitted] ${name}: ✅ Command succeeded`);
         noteGhostShowsCommandAheadOfTelemetry();
       } else if (result.data && !result.data.success) {
@@ -590,16 +649,10 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
       return;
     }
 
-    // 🔧 选项1：通过 IK 求解并发送关节命令
-    // const ok = applyTaskPoseByIK(pose, {
-    //   syncJointUi: true,
-    //   syncTaskUi: true,
-    //   syncViewer: true,
-    // });
-
-    // if (!ok) {
-    //   setStatus("IK solve failed for task move.", "warn");
-    // }
+    if (isLocalPreviewOnly()) {
+      setStatus("Local preview: task-space move applied (no gateway).", "warn");
+      return;
+    }
     
     // 🔧 选项2：直接发送任务空间命令到后端
     
@@ -611,7 +664,12 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
         setStatus("Preview task-space move applied locally.", "warn");
       } else if (result.data && result.data.success) {
         console.log(`[TaskSpace onMove] ✅ Absolute pose command succeeded`);
-        setStatus("Task-space absolute command sent.", "ok");
+        setStatus(
+          isHardwareControlActive()
+            ? "Task-space absolute command sent."
+            : "Simulation: task-space command sent to rt_control.",
+          "ok"
+        );
       } else if (result.data && !result.data.success) {
         console.error(`[TaskSpace onMove] ❌ Command failed: ${result.data.message}`);
         setStatus(`Failed to send absolute pose command. ${result.data.message}`, "danger-text");
@@ -647,6 +705,11 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
       return;
     }
 
+    if (isLocalPreviewOnly()) {
+      setStatus("Local preview: task jog applied (no gateway).", "warn");
+      return;
+    }
+
     try {
       console.log(`[TaskSpace onMoveIncremental] Sending incremental pose command:`, deltaPoseRad);
       const result = await sendPoseIncrementalCommand(poseToArray(deltaPoseRad));
@@ -655,7 +718,12 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
         setStatus("Preview task-space jog applied locally.", "warn");
       } else if (result.data && result.data.success) {
         console.log(`[TaskSpace onMoveIncremental] ✅ Incremental pose command succeeded`);
-        setStatus("Task-space incremental command sent.", "ok");
+        setStatus(
+          isHardwareControlActive()
+            ? "Task-space incremental command sent."
+            : "Simulation: incremental command sent to rt_control.",
+          "ok"
+        );
       } else if (result.data && !result.data.success) {
         console.error(`[TaskSpace onMoveIncremental] ❌ Command failed: ${result.data.message}`);
         setStatus(`Failed to send incremental pose command. ${result.data.message}`, "danger-text");
@@ -795,6 +863,11 @@ async function connectSelectedRobot() {
       setStatus("Preview mode active. No gateway configured.", "warn");
     }else if (result.data.success) {
       setStatus("Robot connected to hardware.", "ok");
+      ghostCommandPending = false;
+      if (latestJointPosition?.length) {
+        syncCommandStateFromTelemetry(latestJointPosition);
+        applyGhostRobotVisibility(false);
+      }
     }else if (!result.data.success) {
       setStatus(`Failed to connect to hardware. ${result.data.message}`, "danger-text");
     }
@@ -959,6 +1032,11 @@ function bindButtons() {
       syncViewer: true,
     });
 
+    if (isLocalPreviewOnly()) {
+      setStatus("Local preview: home pose applied (no gateway).", "warn");
+      return;
+    }
+
     const result = await sendHomeCommand(
       jointNames,
       zeroQ,
@@ -967,7 +1045,12 @@ function bindButtons() {
     if (result.mode === "preview") {
       setStatus("Preview mode active. No gateway configured.", "warn");
     }else if (result.data.success) {
-      setStatus("Successfully moved to home position.", "ok");
+      setStatus(
+        isHardwareControlActive()
+          ? "Successfully moved to home position."
+          : "Simulation: home command sent to rt_control.",
+        "ok"
+      );
     }else if (!result.data.success) {
       setStatus(`Failed to move to home position. ${result.data.message}`, "danger-text");
     }
@@ -1105,7 +1188,11 @@ function bindButtons() {
       if (result.mode === "preview") {
         setStatus("Preview mode active. No gateway configured.", "warn");
       }else if (result.data.success) {
-        setStatus("Robot disconnected to hardware.", "ok");
+        setStatus("Robot disconnected — rt_control simulation active (solid arm follows stream).", "ok");
+        ghostCommandPending = false;
+        if (latestJointPosition?.length) {
+          syncCommandStateFromTelemetry(latestJointPosition);
+        }
       }else if (!result.data.success) {
         setStatus(`Failed to connect to hardware. ${result.data.message}`, "danger-text");
       }
@@ -1299,7 +1386,11 @@ function connectStream(url) {
           lastStreamError = "";
           setStatus("Robot stream connected.", "ok");
         }
-        updateConnectionUi("connect");
+        if (isHardwareControlActive() && data.hardware_connected) {
+          updateConnectionUi("connect");
+        } else if (!isHardwareControlActive()) {
+          updateConnectionUi("ready");
+        }
       }
 
       if (eePose?.length >= 3) {

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+import gc
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
@@ -11,7 +13,7 @@ import traceback
 
 repo_path = os.path.dirname(os.path.dirname(__file__))
 parent_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-spark2_sdk_path = os.path.join(parent_path, "spark2_sdk", "python")
+spark2_sdk_path = os.path.join(parent_path, "spark2_sdk", "spark2_python_dist")
 sys.path.insert(0, spark2_sdk_path)
 
 from spark2_sdk import (
@@ -61,6 +63,7 @@ CONFIG_PREFIX_PATH = resolve_config_prefix_path()
 
 robot = None
 robot_started = False
+robot_hardware_connected = False
 teach_active = False
 runtime_start_lock = threading.Lock()
 send_to_robot_lock = threading.Lock()
@@ -94,8 +97,59 @@ def _get_robot():
     return robot
 
 
+def _panel_udp_port():
+    config_yaml = os.path.join(CONFIG_PREFIX_PATH, "config.yaml")
+    try:
+        with open(config_yaml, encoding="utf-8") as fh:
+            in_panel = False
+            for line in fh:
+                if line.strip().startswith("panel:"):
+                    in_panel = True
+                    continue
+                if in_panel and line and not line.startswith((" ", "\t")):
+                    break
+                match = re.match(r"\s+port:\s*(\d+)", line)
+                if in_panel and match:
+                    return int(match.group(1))
+    except Exception:
+        pass
+    return 12309
+
+
+def _panel_port_holder_hint(port):
+    return (
+        f"Panel UDP port {port} is unavailable (already in use). "
+        "Close Qt upper software and any other rt_control_server.py instance, "
+        f"then run: ss -ulnp | grep {port}"
+    )
+
+
+def _format_runtime_error(exc):
+    message = str(exc)
+    if "Failed to initialize UDP node" in message or "Failed to initialize UDP communication" in message:
+        return _panel_port_holder_hint(_panel_udp_port())
+    return message
+
+
+def _reset_robot_session():
+    """Release Spark2 UDP resources so panel port can be reused after a failed start()."""
+    global robot, robot_started, robot_hardware_connected, teach_active
+    if robot is not None:
+        old_robot = robot
+        robot = None
+        try:
+            old_robot.stop()
+        except Exception:
+            pass
+        del old_robot
+        gc.collect()
+    robot_started = False
+    robot_hardware_connected = False
+    teach_active = False
+
+
 def ensure_robot_runtime():
-    """Start Spark2 runtime so UDP feedback (/stream) is available."""
+    """Start Spark2 UDP session for /stream (panel simulation until Connect)."""
     global robot_started, teach_active
 
     if robot_started:
@@ -104,27 +158,64 @@ def ensure_robot_runtime():
     with runtime_start_lock:
         if robot_started:
             return True, "Success"
-        robot_instance = _get_robot()
-        robot_instance.start()
-        robot_instance.enable_arm_joint(
-            JointState6b([True, True, True, True, True, True])
-        )
-        robot_started = True
+        try:
+            robot_instance = _get_robot()
+            robot_instance.start()
+            robot_started = True
+            teach_active = False
+        except Exception:
+            _reset_robot_session()
+            raise
+    return True, "Success"
+
+
+def ensure_hardware_control():
+    """Connect to real hardware using the same sequence as Qt ConnectionButton."""
+    global robot_hardware_connected
+
+    ensure_robot_runtime()
+    if robot_hardware_connected:
+        return True, "Success"
+
+    robot_instance = _get_robot()
+    robot_instance.connect_hardware()
+    robot_instance.enable_arm_joint(
+        JointState6b([True, True, True, True, True, True])
+    )
+    robot_hardware_connected = True
+    return True, "Success"
+
+
+def release_hardware_control():
+    """Return to simulation mode; keep UDP stream alive."""
+    global robot_hardware_connected, teach_active
+
+    if not robot_started:
+        return True, "Success"
+
+    robot_instance = _get_robot()
+    if teach_active:
+        robot_instance.stop_teach()
         teach_active = False
+    if robot_hardware_connected:
+        robot_instance.disconnect_hardware()
+        robot_hardware_connected = False
     return True, "Success"
 
 
 def _runtime_startup_worker():
+    global last_stream_error
     while True:
         if robot_started:
             time.sleep(RUNTIME_RETRY_SEC)
             continue
         try:
             ensure_robot_runtime()
-            print("Spark2 runtime connected to rt_control.")
+            last_stream_error = ""
+            print("Spark2 runtime connected to rt_control (simulation mode, stream only).")
         except Exception as exc:
-            last_stream_error = str(exc)
-            print(f"Waiting for rt_control... {exc}")
+            last_stream_error = _format_runtime_error(exc)
+            print(f"Waiting for rt_control... {last_stream_error}")
             time.sleep(RUNTIME_RETRY_SEC)
 
 
@@ -233,6 +324,7 @@ def _read_stream_state():
             "connected": False,
                 "ee_pose": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
             "joint_pos": [[0.0] * 6],
+            "hardware_connected": False,
             "error": last_stream_error or "Waiting for rt_control (start cuarm_rt_control first).",
         }
 
@@ -242,6 +334,7 @@ def _read_stream_state():
         last_stream_error = ""
         return {
             "connected": True,
+            "hardware_connected": robot_hardware_connected,
             "ee_pose": ee_pose,
             "joint_pos": joint_pos,
             "error": "",
@@ -256,11 +349,12 @@ def _read_stream_state():
             "connected": False,
                 "ee_pose": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
             "joint_pos": [[0.0] * 6],
+            "hardware_connected": robot_hardware_connected,
             "error": last_stream_error,
         }
 
 
-def execute_robot_action(robot_id, action, require_connection=True):
+def execute_robot_action(robot_id, action, require_connection=True, require_hardware=False):
     if robot_id == "preview-arm":
         return False, "Select robot_id 'spark2' to control hardware (preview-arm is simulation-only)."
     if robot_id != "spark2":
@@ -275,11 +369,16 @@ def execute_robot_action(robot_id, action, require_connection=True):
         if require_connection and not robot_started:
             return False, (
                 "Robot runtime not ready. Start cuarm_rt_control, then wait for "
-                "'Spark2 runtime connected to rt_control.' in the gateway log."
+                "'Spark2 runtime connected to rt_control (simulation mode, stream only).' "
+                "in the gateway log."
+            )
+        if require_hardware and not robot_hardware_connected:
+            return False, (
+                "Hardware not connected. Click Connect in the web UI before this action."
             )
         action()
     except Exception as exc:
-        success, message = False, str(exc)
+        success, message = False, _format_runtime_error(exc)
     finally:
         send_to_robot_lock.release()
 
@@ -299,12 +398,9 @@ def connect_to_hardware(robot_id, payload):
     def action():
         global teach_active
         if enable:
-            ensure_robot_runtime()
+            ensure_hardware_control()
         else:
-            # Keep SDK runtime alive for /stream, same as the old UDP gateway.
-            if teach_active:
-                _get_robot().stop_teach()
-                teach_active = False
+            release_hardware_control()
 
     return execute_robot_action(robot_id, action, require_connection=False)
 
@@ -414,7 +510,7 @@ def enable_teach(robot_id, payload):
             robot_instance.stop_teach()
             teach_active = False
 
-    return execute_robot_action(robot_id, action)
+    return execute_robot_action(robot_id, action, require_hardware=True)
 
 
 def post_request(robot_id, payload, handler):
@@ -570,8 +666,4 @@ if __name__ == "__main__":
     except Exception:
         traceback.print_exc()
     finally:
-        if robot_started and robot is not None:
-            try:
-                robot.stop()
-            except Exception:
-                pass
+        _reset_robot_session()

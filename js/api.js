@@ -51,6 +51,16 @@ export function getApiState() {
   return { ...state, robot: currentRobot() };
 }
 
+/** Gateway configured and user clicked Connect (real hardware control). */
+export function isHardwareControlActive() {
+  return !!state.gatewayUrl && state.connected;
+}
+
+/** Gateway URL configured — motion goes to rt_control (hardware or panel simulation). */
+export function isGatewayActive() {
+  return !!state.gatewayUrl;
+}
+
 export async function connectRobot() {
   const result = await post('/connect', {});
   state.connected = true;
