@@ -25,7 +25,7 @@ html, body {
 }
 body {
   color: var(--text);
-  background-image: url('_exportedimage/_exportedimage/Background.svg');
+  background-image: url('image/Background.svg');
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -245,7 +245,7 @@ html:fullscreen,
 html:-webkit-full-screen,
 html.is-native-fullscreen {
   background-color: var(--bg);
-  background-image: url('_exportedimage/_exportedimage/Background.svg');
+  background-image: url('image/Background.svg');
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -269,7 +269,7 @@ html.is-native-fullscreen .layout {
 body.is-pseudo-fullscreen {
   overflow: hidden;
   background-color: var(--bg);
-  background-image: url('_exportedimage/_exportedimage/Background.svg');
+  background-image: url('image/Background.svg');
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -338,7 +338,7 @@ body.is-pseudo-fullscreen .layout {
   padding: 12px 18px;
   width: min(78%, 920px);
   margin: 0 auto;
-  background-image: url('./_exportedimage/_exportedimage/Rectangle 260.svg'); 
+  background-image: url('./image/Rectangle 260.svg'); 
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -387,7 +387,7 @@ body.is-pseudo-fullscreen .layout {
   align-items: center;
   justify-content: space-between;
   gap: 0;
-  background-image: url('./_exportedimage/_exportedimage/Rectangle 274.svg'); 
+  background-image: url('./image/Rectangle 274.svg'); 
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -861,7 +861,7 @@ body.is-pseudo-fullscreen .layout {
 
 /* Teach 页关节列表（镜像 UI）：滑轨使用设计稿 Group 185_2.svg */
 #jointContainerTeach .slider-large {
-  --slider-track-bg: url("./_exportedimage/_exportedimage/Group%20185_2.svg") no-repeat center / 100% 100%;
+  --slider-track-bg: url("./image/Group%20185_2.svg") no-repeat center / 100% 100%;
 }
 
 #jointContainerTeach .slider-large::-webkit-slider-runnable-track {
