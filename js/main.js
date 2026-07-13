@@ -622,10 +622,12 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
   stepDeg: 1        // 每次步进的角度，可根据需要调整
 });
 
-const kinematicsLab = new KinematicsLab(kinematicsLabContainerEl, {
-  viewer,
-  setStatus,
-});
+const kinematicsLab = kinematicsLabContainerEl
+  ? new KinematicsLab(kinematicsLabContainerEl, {
+      viewer,
+      setStatus,
+    })
+  : null;
 
 const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onReadCurrent: () => {
@@ -801,7 +803,7 @@ async function loadCurrentRobot(path) {
     applyGhostRobotVisibility(true);
 
     kinematics = new RobotKinematics(robotGhost);
-    kinematicsLab.setRobotContext(kinematics);
+    kinematicsLab?.setRobotContext(kinematics);
 
     jointsUI.build(robotGhost);
     teach.syncTeachJointMirror();

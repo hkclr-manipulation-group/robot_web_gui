@@ -1154,6 +1154,7 @@ body.is-pseudo-fullscreen .layout {
   }
 }
 
+/* Lab module hidden
 .lab-shell {
   display: flex;
   flex-direction: column;
@@ -1397,6 +1398,7 @@ body.is-pseudo-fullscreen .layout {
     grid-template-columns: 1fr;
   }
 }
+*/
 
 @media (max-width: 820px) {
   .viewer-tabs {
@@ -1421,6 +1423,7 @@ body.is-pseudo-fullscreen .layout {
     font-size: 16px;
   }
 
+  /* Lab module hidden
   .lab-inline-row,
   .lab-joint-row,
   .lab-dh-header,
@@ -1432,6 +1435,7 @@ body.is-pseudo-fullscreen .layout {
   .lab-matrix-grid {
     grid-template-columns: 1fr;
   }
+  */
 }
 
 /* Mobile runtime layout overrides: keep the robot visible, then scale controls down. */
