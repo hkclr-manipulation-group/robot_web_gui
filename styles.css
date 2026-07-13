@@ -304,17 +304,18 @@ body.is-pseudo-fullscreen .layout {
 }
 
 .floating-panel {
-  position: absolute;
-  width: 380px;
-  max-height: calc(100vh - 140px);
+  position: fixed;
+  width: min(380px, calc(100vw - 20px));
+  max-height: calc(100dvh - 24px);
   overflow: auto;
   display: none;
   z-index: 60;
+  -webkit-overflow-scrolling: touch;
 
-  background: var(--panel); 
-  border: 1px solid var(--line); 
-  border-radius: 18px; 
-  box-shadow: var(--shadow); 
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
 }
 .floating-panel.active { display: block; }
 .viewer-toolbar, .pose-bar {

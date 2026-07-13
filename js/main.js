@@ -1226,44 +1226,50 @@ function bindButtons() {
   teach.bindTeachButtons();
   initFullscreen();
 
-   // Robot Manager floating panel toggle
+  // Robot Manager floating panel toggle
   const mgrBtn = document.getElementById("openRobotManagerBtn");
   const mgrPanel = document.getElementById("robotManagerFloating");
   if (mgrBtn && mgrPanel) {
+    const positionMgrPanel = () => {
+      const btnRect = mgrBtn.getBoundingClientRect();
+      const margin = 10;
+      const gap = 8;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const panelWidth = Math.min(380, viewportWidth - margin * 2);
+
+      // Always open below the Manager button
+      let topPosition = btnRect.bottom + gap;
+      let leftPosition = btnRect.left;
+
+      if (leftPosition + panelWidth > viewportWidth - margin) {
+        leftPosition = viewportWidth - panelWidth - margin;
+      }
+      if (leftPosition < margin) {
+        leftPosition = margin;
+      }
+
+      // Keep panel in view by scrolling internally instead of flipping above the button
+      const availableBelow = Math.max(160, viewportHeight - topPosition - margin);
+      mgrPanel.style.width = panelWidth + "px";
+      mgrPanel.style.maxHeight = availableBelow + "px";
+      mgrPanel.style.left = leftPosition + "px";
+      mgrPanel.style.top = topPosition + "px";
+      mgrPanel.style.right = "auto";
+      mgrPanel.style.bottom = "auto";
+    };
+
     mgrBtn.onclick = (e) => {
       e.stopPropagation();
       const isActive = mgrPanel.classList.toggle("active");
       mgrPanel.setAttribute("aria-hidden", isActive ? "false" : "true");
-      
-      if (isActive) {
-        const btnRect = mgrBtn.getBoundingClientRect();
-        const panelWidth = 380;
-        const panelHeight = mgrPanel.scrollHeight || 400; 
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        
-        let leftPosition = btnRect.left;
-        
-        if (leftPosition + panelWidth > viewportWidth) {
-          leftPosition = viewportWidth - panelWidth - 10; 
-        }
-        
-        if (leftPosition < 10) {
-          leftPosition = 10;
-        }
-        
-        let topPosition = btnRect.bottom + 8;
-        
-        if (topPosition + panelHeight > viewportHeight) {
-          topPosition = btnRect.top - panelHeight - 8;
-        }
-        
-        mgrPanel.style.left = leftPosition + "px";
-        mgrPanel.style.top = topPosition + "px";
-        mgrPanel.style.right = "auto"; 
-      }
+      if (isActive) positionMgrPanel();
     };
-    
+
+    window.addEventListener("resize", () => {
+      if (mgrPanel.classList.contains("active")) positionMgrPanel();
+    });
+
     document.addEventListener("click", (ev) => {
       if (!mgrPanel.classList.contains("active")) return;
       if (mgrPanel.contains(ev.target) || mgrBtn.contains(ev.target)) return;
