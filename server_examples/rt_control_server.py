@@ -26,10 +26,7 @@ from spark2_sdk import (
     SmoothingMethod,
 )
 
-ROBOTS = {
-    "spark2": {"ip": "192.168.1.10", "port": 10001},
-    "preview-arm": {"ip": "preview", "port": 0},
-}
+KNOWN_ROBOT_IDS = {"spark2", "preview-arm"}
 
 SEND_LOCK_TIMEOUT_SEC = 30.0
 STREAM_INTERVAL_SEC = 0.01
@@ -514,8 +511,7 @@ def enable_teach(robot_id, payload):
 
 
 def post_request(robot_id, payload, handler):
-    robot = ROBOTS.get(robot_id)
-    if robot is None:
+    if robot_id not in KNOWN_ROBOT_IDS:
         return {"ok": False, "error": f"Unknown robot_id: {robot_id}"}
 
     success, message = handler(robot_id, payload)

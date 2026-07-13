@@ -831,9 +831,7 @@ function populateRobotSelector() {
   DEFAULT_ROBOTS.forEach((item) => {
     const option = document.createElement("option");
     option.value = item.id;
-    option.textContent = `${item.name}${
-      item.ip && item.ip !== "-" ? ` (${item.ip})` : ""
-    }`;
+    option.textContent = item.name;
     robotSelectEl.appendChild(option);
   });
 }

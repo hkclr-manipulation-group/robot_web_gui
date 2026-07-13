@@ -36,8 +36,6 @@ Example:
 
 - frontend: `https://<your-user>.github.io/<repo>`
 - local gateway: `http://<your-pc-ip>:9000`
-- robot A: `192.168.1.10`
-- robot B: `192.168.1.11`
 
 In the GUI:
 

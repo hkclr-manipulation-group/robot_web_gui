@@ -8,8 +8,8 @@ export const STORAGE_KEYS = {
 };
 
 export const DEFAULT_ROBOTS = [
-  { id: 'preview-arm', name: 'Preview Arm', mode: 'preview', ip: '-', dof: 6 },
-  { id: 'spark2', name: 'Spark2', mode: 'wifi', ip: '192.168.1.10', dof: 6 },
+  { id: 'preview-arm', name: 'Preview Arm', mode: 'preview', dof: 6 },
+  { id: 'spark2', name: 'Spark2', mode: 'wifi', dof: 6 },
 ];
 
 export const CONTINUOUS_RANGE = { min: -Math.PI, max: Math.PI, step: 0.0025 };

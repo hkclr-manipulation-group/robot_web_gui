@@ -7,22 +7,15 @@ GitHub Pages serves the frontend; this file is only a demo backend adapter.
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 
-ROBOTS = {
-    "left-arm": {"ip": "192.168.1.10", "port": 10001},
-    "right-arm": {"ip": "192.168.1.11", "port": 10001},
-    "preview-arm": {"ip": "preview", "port": 0},
-}
+KNOWN_ROBOT_IDS = {"preview-arm"}
 
 
 def fake_send_to_robot(robot_id, payload):
-    robot = ROBOTS.get(robot_id)
-    if robot is None:
+    if robot_id not in KNOWN_ROBOT_IDS:
         return {"ok": False, "error": f"Unknown robot_id: {robot_id}"}
     return {
         "ok": True,
         "robot_id": robot_id,
-        "target_ip": robot["ip"],
-        "target_port": robot["port"],
         "echo": payload,
     }
 
