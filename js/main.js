@@ -827,15 +827,8 @@ function prepareRobotPair(path) {
   return entry;
 }
 
-/** Warm-cache other configured robots after the active one is ready. */
 function shouldPreloadBackgroundRobots() {
-  const ua = navigator.userAgent || "";
-  // iPhone/iPad Safari: background-loading multi-MB meshes often OOMs or stalls the tab.
-  if (/iPhone|iPad|iPod/i.test(ua)) return false;
-  if (typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4) {
-    return false;
-  }
-  return true;
+  return false;
 }
 
 function preloadBackgroundRobots(exceptName) {

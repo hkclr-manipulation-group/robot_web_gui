@@ -203,18 +203,8 @@ export async function loadRobotFromUrdf(url) {
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
       fn(value);
     };
-
-    // iOS Safari can hang forever on a stalled mesh request — surface a timeout.
-    const timeoutMs = 120000;
-    const timer = setTimeout(() => {
-      finish(
-        reject,
-        new Error(`URDF load timed out after ${timeoutMs / 1000}s (${url}).`)
-      );
-    }, timeoutMs);
 
     manager.onLoad = () => {
       if (!captured) {
@@ -231,7 +221,7 @@ export async function loadRobotFromUrdf(url) {
     };
 
     manager.onError = (itemUrl) => {
-      finish(reject, new Error(`Failed to load URDF dependency: ${itemUrl}`));
+      console.warn(`[URDF] dependency failed (continuing): ${itemUrl}`);
     };
 
     loader.load(
