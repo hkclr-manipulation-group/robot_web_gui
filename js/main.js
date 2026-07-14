@@ -1,10 +1,11 @@
 import {
   DEFAULT_ROBOTS,
-  DEFAULT_URDF_PATH,
   PATH_DEFAULTS,
   RT_INTERPOLATION,
   STORAGE_KEYS,
   VIEWER,
+  findRobotByName,
+  getUrdfPathForRobot,
   rtInterpolationPayload,
 } from "./config.js";
 
@@ -38,7 +39,7 @@ import {
   cloneMaterialsPerMesh,
   loadRobotFromUrdf,
 } from "./urdf-loader-wrapper.js";
-import { createStreamEulerStabilizer, formatEePoseValue, formatPoseText, readFileAsText, sleep, quaternionToPose } from "./utils.js";
+import { createStreamEulerStabilizer, formatEePoseValue, formatPoseText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import { initFullscreen } from "./fullscreen.js";
 import * as THREE from "three";
@@ -50,7 +51,6 @@ import * as THREE from "three";
 const viewer = new RobotViewer(document.getElementById("viewer"));
 
 const statusEl = document.getElementById("status");
-const urdfPathEl = document.getElementById("urdfPath");
 const gatewayUrlEl = document.getElementById("gatewayUrl");
 const robotSelectEl = document.getElementById("robotSelect");
 
@@ -327,9 +327,7 @@ function transformPoseToRobotPose(transformPose) {
 
 function updateConnectionUi(kind = "preview") {
   const apiState = getApiState();
-  const robotInfo =
-    DEFAULT_ROBOTS.find((item) => item.id === apiState.activeRobotId) ||
-    DEFAULT_ROBOTS[0];
+  const robotInfo = apiState.robot || findRobotByName(apiState.activeRobotName);
 
   // activeRobotTextEl.textContent = `${robotInfo.name} · ${robotInfo.mode}`;
   robotIdTextEl.textContent = robotInfo.id;
@@ -810,8 +808,6 @@ async function loadCurrentRobot(path) {
 
     syncMeta();
 
-    localStorage.setItem(STORAGE_KEYS.lastUrdfPath, path);
-
     setStatus("URDF loaded.", "ok");
     return true;
   } catch (error) {
@@ -830,10 +826,27 @@ function populateRobotSelector() {
 
   DEFAULT_ROBOTS.forEach((item) => {
     const option = document.createElement("option");
-    option.value = item.id;
+    option.value = item.name;
     option.textContent = item.name;
     robotSelectEl.appendChild(option);
   });
+}
+
+async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
+  const robot = findRobotByName(robotName);
+  setActiveRobot(robot.name);
+  robotSelectEl.value = robot.name;
+  localStorage.setItem(STORAGE_KEYS.robotId, robot.name);
+
+  const loaded = await loadCurrentRobot(getUrdfPathForRobot(robot));
+  if (!loaded && robot.name !== DEFAULT_ROBOTS[0].name) {
+    return selectRobotAndLoadUrdf(DEFAULT_ROBOTS[0].name, { announce });
+  }
+
+  if (announce && loaded) {
+    setStatus(`Loaded URDF for ${robot.name}.`, "ok");
+  }
+  return loaded;
 }
 
 async function saveGateway() {
@@ -981,10 +994,6 @@ const teachSystem = teach.system;
 /* -------------------------------------------------------------------------- */
 
 function bindButtons() {
-  document.getElementById("loadUrdfBtn").onclick = () => {
-    loadCurrentRobot(urdfPathEl.value.trim() || DEFAULT_URDF_PATH);
-  };
-
   document.getElementById("homeBtn").onclick = async () => {
     if (!kinematics) return;
     viewer.fitToRobot();
@@ -1019,21 +1028,6 @@ function bindButtons() {
     }else if (!result.data.success) {
       setStatus(`Failed to move to home position. ${result.data.message}`, "danger-text");
     }
-  };
-
-  document.getElementById("urdfFile").onchange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const text = await readFileAsText(file);
-    const blob = new Blob([text], { type: "application/xml" });
-    const url = URL.createObjectURL(blob);
-
-    urdfPathEl.value = file.name;
-
-    await loadCurrentRobot(url);
-
-    event.target.value = "";
   };
 
   document.getElementById("saveGatewayBtn").onclick = saveGateway;
@@ -1137,18 +1131,9 @@ function bindButtons() {
     });
   }
 
-  robotSelectEl.onchange = () => {
-    setActiveRobot(robotSelectEl.value);
-    localStorage.setItem(STORAGE_KEYS.robotId, robotSelectEl.value);
-
-    updateConnectionUi(gatewayUrlEl.value.trim() ? "warn" : "warn");
-
-    setStatus(
-      `Switched active robot to ${
-        robotSelectEl.selectedOptions[0]?.textContent || robotSelectEl.value
-      }.`,
-      "ok"
-    );
+  robotSelectEl.onchange = async () => {
+    updateConnectionUi(gatewayUrlEl.value.trim() ? "ready" : "warn");
+    await selectRobotAndLoadUrdf(robotSelectEl.value);
   };
 }
 
@@ -1319,25 +1304,16 @@ function updateEePoseCard(position) {
   populateRobotSelector();
 
   const savedGateway = localStorage.getItem(STORAGE_KEYS.gatewayUrl) || "";
-  const storedRobotId = localStorage.getItem(STORAGE_KEYS.robotId);
-  const savedRobotId =
-    storedRobotId === "spark"
-      ? "spark2"
-      : (storedRobotId || (savedGateway ? "spark2" : DEFAULT_ROBOTS[0].id));
-  const storedUrdf = localStorage.getItem(STORAGE_KEYS.lastUrdfPath);
-  const savedUrdf =
-    storedUrdf === "./urdf/spark/robot.urdf"
-      ? DEFAULT_URDF_PATH
-      : (storedUrdf || DEFAULT_URDF_PATH);
-  const savedTraj = localStorage.getItem(STORAGE_KEYS.lastTrajectory);
+  const storedRobotKey = localStorage.getItem(STORAGE_KEYS.robotId);
+  // Prefer robot `name`; migrate legacy stored gateway ids (spark / spark2).
+  const savedRobotName = findRobotByName(
+    storedRobotKey === "spark" || storedRobotKey === "spark2"
+      ? DEFAULT_ROBOTS[0].name
+      : (storedRobotKey || DEFAULT_ROBOTS[0].name)
+  ).name;
 
   gatewayUrlEl.value = savedGateway;
   setGatewayUrl(savedGateway);
-
-  robotSelectEl.value = savedRobotId;
-  setActiveRobot(savedRobotId);
-
-  urdfPathEl.value = savedUrdf;
 
   updateConnectionUi(savedGateway ? "ready" : "warn");
 
@@ -1345,24 +1321,7 @@ function updateEePoseCard(position) {
   bindCardTabs();
   teach.refreshTeachControls();
 
-  //自动恢复上次的示教路径
-  // if (savedTraj) {
-  //   try {
-  //     teachSystem.replaceAll(JSON.parse(savedTraj));
-  //     teach.updateTeachUi();
-  //   } catch {
-  //     teachSystem.clear();
-  //     teach.updateTeachUi();
-  //   }
-  // } else {
-  //   teach.updateTeachUi();
-  // }
-
   connectStream(savedGateway);
 
-  const loaded = await loadCurrentRobot(savedUrdf);
-  if (!loaded && savedUrdf !== DEFAULT_URDF_PATH) {
-    urdfPathEl.value = DEFAULT_URDF_PATH;
-    await loadCurrentRobot(DEFAULT_URDF_PATH);
-  }
+  await selectRobotAndLoadUrdf(savedRobotName, { announce: false });
 })();

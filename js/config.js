@@ -1,16 +1,26 @@
-export const DEFAULT_URDF_PATH = './urdf/spark2/robot.urdf';
+export const DEFAULT_ROBOTS = [
+  { id: 'spark2', name: 'spark2_v1', mode: 'wifi', dof: 6 },
+  { id: 'spark2', name: 'spark2_v2', mode: 'wifi', dof: 6 },
+  { id: 'spark2', name: 'spark2_v2_2', mode: 'wifi', dof: 6 },
+];
+
+/** URDF path derived from robot `name` (folder under `./urdf/`). */
+export function getUrdfPathForRobot(robot) {
+  return `./urdf/${robot.name}/robot.urdf`;
+}
+
+export function findRobotByName(name) {
+  return DEFAULT_ROBOTS.find((item) => item.name === name) || DEFAULT_ROBOTS[0];
+}
+
+export const DEFAULT_URDF_PATH = getUrdfPathForRobot(DEFAULT_ROBOTS[0]);
 
 export const STORAGE_KEYS = {
-  lastUrdfPath: 'robot-web-gui.lastUrdfPath',
   lastTrajectory: 'robot-web-gui.lastTrajectory',
   gatewayUrl: 'robot-web-gui.gatewayUrl',
+  /** Persists selected robot `name` (URDF variant), not gateway `id`. */
   robotId: 'robot-web-gui.robotId',
 };
-
-export const DEFAULT_ROBOTS = [
-  { id: 'preview-arm', name: 'Preview Arm', mode: 'preview', dof: 6 },
-  { id: 'spark2', name: 'Spark2', mode: 'wifi', dof: 6 },
-];
 
 export const CONTINUOUS_RANGE = { min: -Math.PI, max: Math.PI, step: 0.0025 };
 export const ROTARY_FALLBACK_RANGE = { min: -Math.PI, max: Math.PI, step: 0.0025 };

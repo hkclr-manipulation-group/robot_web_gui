@@ -1,8 +1,9 @@
-import { DEFAULT_ROBOTS } from './config.js';
+import { DEFAULT_ROBOTS, findRobotByName } from './config.js';
 
 const state = {
   gatewayUrl: '',
-  activeRobotId: DEFAULT_ROBOTS[0].id,
+  /** Selected robot variant (`name`); gateway still receives robot `id`. */
+  activeRobotName: DEFAULT_ROBOTS[0].name,
   connected: false,
 };
 
@@ -11,21 +12,21 @@ function ensureNoTrailingSlash(url) {
 }
 
 function currentRobot() {
-  return DEFAULT_ROBOTS.find((item) => item.id === state.activeRobotId) || DEFAULT_ROBOTS[0];
+  return findRobotByName(state.activeRobotName);
 }
 
 async function post(path, payload = {}) {
   const gateway = ensureNoTrailingSlash(state.gatewayUrl);
+  const robot = currentRobot();
   if (!gateway) {
-    return { ok: true, mode: 'preview', path, payload, robot: currentRobot() };
+    return { ok: true, mode: 'preview', path, payload, robot };
   }
 
   const response = await fetch(`${gateway}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ robot_id: state.activeRobotId, ...payload }),
+    body: JSON.stringify({ robot_id: robot.id, ...payload }),
   });
-
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
@@ -43,12 +44,13 @@ export function setGatewayUrl(url) {
   state.gatewayUrl = ensureNoTrailingSlash(url);
 }
 
-export function setActiveRobot(robotId) {
-  state.activeRobotId = robotId;
+export function setActiveRobot(robotName) {
+  state.activeRobotName = findRobotByName(robotName).name;
 }
 
 export function getApiState() {
-  return { ...state, robot: currentRobot() };
+  const robot = currentRobot();
+  return { ...state, robot, activeRobotId: robot.id };
 }
 
 /** Gateway configured and user clicked Connect (real hardware control). */
