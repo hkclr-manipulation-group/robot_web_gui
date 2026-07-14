@@ -778,24 +778,79 @@ viewer.callbacks.onTaskMove = (pose) => {
 /* Robot loading                                                               */
 /* -------------------------------------------------------------------------- */
 
-async function loadCurrentRobot(path) {
-  try {
-    setStatus("Loading URDF...", "warn");
+/** path -> Promise<{ ghost, hardware }> — share in-flight + warm cache for switches */
+const robotPairCache = new Map();
+/** Paths whose pair has finished preparing (instant switch, no loading status) */
+const robotPairReady = new Set();
+/** Ignore superseded async loads when the user switches robots quickly */
+let robotLoadGeneration = 0;
+let activeRobotPath = null;
 
-    const [ghost, hardware] = await Promise.all([
-      loadRobotFromUrdf(path),
-      loadRobotFromUrdf(path),
-    ]);
+/**
+ * Load URDF once, clone for ghost/hardware, cache the prepared pair.
+ * Subsequent selects for the same path reuse the cache (no network).
+ */
+function prepareRobotPair(path) {
+  let entry = robotPairCache.get(path);
+  if (entry) return entry;
+
+  entry = (async () => {
+    const base = await loadRobotFromUrdf(path);
+    const hardware = base;
+    const ghost = typeof base.clone === "function" ? base.clone(true) : base;
+
+    if (ghost === hardware) {
+      // Fallback: loader without clone — load a second copy (slower).
+      const second = await loadRobotFromUrdf(path);
+      cloneMaterialsPerMesh(hardware);
+      cloneMaterialsPerMesh(second);
+      applyHardwareContrastStyle(hardware);
+      applyGhostVisualStyle(second);
+      robotPairReady.add(path);
+      return { ghost: second, hardware };
+    }
+
+    cloneMaterialsPerMesh(hardware);
+    cloneMaterialsPerMesh(ghost);
+    applyHardwareContrastStyle(hardware);
+    applyGhostVisualStyle(ghost);
+    robotPairReady.add(path);
+    return { ghost, hardware };
+  })();
+
+  robotPairCache.set(path, entry);
+  entry.catch(() => {
+    // Allow retry on next select if this preparation failed.
+    if (robotPairCache.get(path) === entry) robotPairCache.delete(path);
+    robotPairReady.delete(path);
+  });
+  return entry;
+}
+
+/** Warm-cache other configured robots after the active one is ready. */
+function preloadBackgroundRobots(exceptName) {
+  for (const item of DEFAULT_ROBOTS) {
+    if (item.name === exceptName) continue;
+    const path = getUrdfPathForRobot(item);
+    prepareRobotPair(path).catch((error) => {
+      console.warn(`[URDF] background preload failed for ${item.name}:`, error);
+    });
+  }
+}
+
+async function loadCurrentRobot(path) {
+  const generation = ++robotLoadGeneration;
+
+  try {
+    if (!robotPairReady.has(path)) setStatus("Loading URDF...", "warn");
+
+    const { ghost, hardware } = await prepareRobotPair(path);
+    if (generation !== robotLoadGeneration) return false;
 
     robotGhost = ghost;
     robotHardware = hardware;
+    activeRobotPath = path;
 
-    /* 打散加载器对不同实例复用的 Material，否则两臂会改到同一实例 */
-    cloneMaterialsPerMesh(robotGhost);
-    cloneMaterialsPerMesh(robotHardware);
-
-    applyHardwareContrastStyle(robotHardware);
-    applyGhostVisualStyle(robotGhost);
     viewer.setDualRobot(robotHardware, robotGhost);
     viewer.setHardwareRobotVisible(false);
     applyGhostRobotVisibility(true);
@@ -811,6 +866,7 @@ async function loadCurrentRobot(path) {
     setStatus("URDF loaded.", "ok");
     return true;
   } catch (error) {
+    if (generation !== robotLoadGeneration) return false;
     console.error(error);
     setStatus(`Failed to load URDF: ${error.message || error}`, "danger-text");
     return false;
@@ -834,17 +890,25 @@ function populateRobotSelector() {
 
 async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
   const robot = findRobotByName(robotName);
+  const path = getUrdfPathForRobot(robot);
+
   setActiveRobot(robot.name);
   robotSelectEl.value = robot.name;
   localStorage.setItem(STORAGE_KEYS.robotId, robot.name);
 
-  const loaded = await loadCurrentRobot(getUrdfPathForRobot(robot));
+  if (activeRobotPath === path && robotGhost && robotHardware) {
+    if (announce) setStatus(`Active robot: ${robot.name}.`, "ok");
+    return true;
+  }
+
+  const loaded = await loadCurrentRobot(path);
   if (!loaded && robot.name !== DEFAULT_ROBOTS[0].name) {
     return selectRobotAndLoadUrdf(DEFAULT_ROBOTS[0].name, { announce });
   }
 
-  if (announce && loaded) {
-    setStatus(`Loaded URDF for ${robot.name}.`, "ok");
+  if (loaded) {
+    preloadBackgroundRobots(robot.name);
+    if (announce) setStatus(`Loaded URDF for ${robot.name}.`, "ok");
   }
   return loaded;
 }
