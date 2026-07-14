@@ -985,41 +985,6 @@ function bindButtons() {
     loadCurrentRobot(urdfPathEl.value.trim() || DEFAULT_URDF_PATH);
   };
 
-  // document.getElementById("fitBtn").onclick = () => {
-  //   viewer.fitToRobot();
-  // };
-
-  // document.getElementById("resetViewBtn").onclick = () => {
-  //   viewer.resetView();
-  // };
-
-  // document.getElementById("refreshPoseBtn").onclick = () => {
-  //   refreshPoseReadout();
-  //   syncViewerFromRobot();
-  //   syncTaskUiFromRobot();
-  // };
-
-  // document.getElementById("readCurrentPoseBtn").onclick = () => {
-  //   if (!kinematics) return;
-  //   taskUI.setPose(kinematics.getEndEffectorPose());
-  // };
-
-  // document.getElementById("captureJointGoalBtn").onclick = () => {
-  //   if (!kinematics) return;
-
-  //   lastGoalMap = kinematics.getCurrentJointMap();
-  //   setStatus("Joint-space goal snapshot captured.", "ok");
-  // };
-
-  // document.getElementById("capturePoseGoalBtn").onclick = () => {
-  //   if (!kinematics) return;
-
-  //   lastGoalPose = kinematics.getEndEffectorPose();
-  //   taskUI.setPose(lastGoalPose);
-
-  //   setStatus("Task-space goal snapshot captured.", "ok");
-  // };
-
   document.getElementById("homeBtn").onclick = async () => {
     if (!kinematics) return;
     viewer.fitToRobot();
@@ -1055,110 +1020,6 @@ function bindButtons() {
       setStatus(`Failed to move to home position. ${result.data.message}`, "danger-text");
     }
   };
-
-  // document.getElementById("zeroBtn").onclick = async () => {
-  //   if (!kinematics) return;
-
-  //   const zeroQ = kinematics.getCurrentJointVector().map(() => 0);
-
-  //   applyJointVector(zeroQ, {
-  //     syncJointUi: true,
-  //     syncTaskUi: true,
-  //     syncViewer: true,
-  //   });
-
-  //   const result = await sendZeroCommand(Object.keys(zeroQ), Object.values(zeroQ));
-  //   if (result.mode === "preview") {
-  //     setStatus("Preview mode active. No gateway configured.", "warn");
-  //   }else if (result.data.success) {
-  //     setStatus("All joints set to zero.", "ok");
-  //   }else if (!result.data.success) {
-  //     setStatus(`Failed to set all joints to zero. ${result.data.message}`, "danger-text");
-  //   }
-  // };
-
-  // document.getElementById("stopBtn").onclick = async () => {
-  //   isBusy = false;
-  //   await sendStopCommand();
-  //   setStatus("Stop requested.", "warn");
-  // };
-
-  // document.getElementById("recordPoseBtn").onclick = () => {
-  //   if (!kinematics) return;
-
-  //   teachSystem.record(kinematics.getCurrentJointMap());
-  //   teach.updateTeachUi();
-
-  //   setStatus("Current pose recorded.", "ok");
-  // };
-
-  // document.getElementById("clearPathBtn").onclick = () => {
-  //   teachSystem.clear();
-  //   teach.updateTeachUi();
-  //   setStatus("Path cleared.", "ok");
-  // };
-
-  // document.getElementById("savePathBtn").onclick = () => {
-  //   saveTrajectoryToFile(teachSystem.getPath());
-  //   setStatus("Trajectory file saved.", "ok");
-  // };
-
-  // document.getElementById("playPathBtn").onclick = async () => {
-  //   await executeTrajectory(teachSystem.getPath());
-  // };
-
-  // document.getElementById("planJointBtn").onclick = () => {
-  //   if (!kinematics) return;
-
-  //   if (!lastGoalMap) {
-  //     lastGoalMap = kinematics.getCurrentJointMap();
-  //     setStatus(
-  //       "Saved current joint state as the goal snapshot. Move the arm, then click again to plan.",
-  //       "warn"
-  //     );
-  //     return;
-  //   }
-
-  //   const current = kinematics.getCurrentJointMap();
-  //   const trajectory = planJointTrajectory(current, lastGoalMap, getPlanSteps());
-
-  //   teachSystem.replaceAll(trajectory);
-  //   teach.updateTeachUi();
-
-  //   setStatus("Joint trajectory generated.", "ok");
-  // };
-
-  // document.getElementById("planCartesianBtn").onclick = () => {
-  //   if (!kinematics) return;
-
-  //   const goalPose = lastGoalPose || taskUI.getPose();
-  //   const startPose = kinematics.getEndEffectorPose();
-
-  //   const trajectory = planCartesianTrajectory(
-  //     kinematics,
-  //     startPose,
-  //     goalPose,
-  //     getPlanSteps()
-  //   );
-
-  //   teachSystem.replaceAll(trajectory);
-  //   teach.updateTeachUi();
-
-  //   setStatus("Cartesian trajectory generated via IK.", "ok");
-  // };
-
-  // document.getElementById("pathFile").onchange = async (event) => {
-  //   const file = event.target.files?.[0];
-  //   if (!file) return;
-
-  //   const trajectory = await loadTrajectoryFromFile(file);
-
-  //   teachSystem.replaceAll(trajectory);
-  //   teach.updateTeachUi();
-
-  //   setStatus("Trajectory loaded.", "ok");
-  //   event.target.value = "";
-  // };
 
   document.getElementById("urdfFile").onchange = async (event) => {
     const file = event.target.files?.[0];
@@ -1484,6 +1345,7 @@ function updateEePoseCard(position) {
   bindCardTabs();
   teach.refreshTeachControls();
 
+  //自动恢复上次的示教路径
   // if (savedTraj) {
   //   try {
   //     teachSystem.replaceAll(JSON.parse(savedTraj));
