@@ -582,6 +582,14 @@ body.is-pseudo-fullscreen .layout {
   min-height: 0;
   min-width: 0;
   position: relative;
+  overflow: hidden;
+}
+
+/* Keep WebGL canvas matched to the flex box on phones (iOS/Android) and desktop */
+#viewer canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 .status-block { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .status-text { font-size: 14px; }

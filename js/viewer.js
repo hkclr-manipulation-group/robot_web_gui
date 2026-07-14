@@ -21,6 +21,10 @@ export class RobotViewer {
 
     this._lock = false;
     this._dragging = false;
+    this._viewWidth = 0;
+    this._viewHeight = 0;
+    this._resizeRaf = 0;
+    this._fitWhenSized = false;
 
     this._initScene();
     this._initRenderer();
@@ -32,8 +36,7 @@ export class RobotViewer {
     this._initLabObjects();
 
     this._resize();
-
-    window.addEventListener("resize", () => this._resize());
+    this._bindViewportListeners();
 
     this._animate();
 
@@ -55,11 +58,16 @@ export class RobotViewer {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
 
-    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    // Cap DPR for mobile (iPhone/Android often 2.5–3) to keep WebGL stable; desktop unchanged when DPR ≤ 2
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
 
     this.container.innerHTML = "";
-    this.container.appendChild(this.renderer.domElement);
+    const canvas = this.renderer.domElement;
+    canvas.style.display = "block";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    this.container.appendChild(canvas);
 
   }
 
@@ -336,6 +344,13 @@ export class RobotViewer {
 
   fitToRobot() {
 
+    this._resize({ allowFit: false });
+
+    if (this._viewWidth < 2 || this._viewHeight < 2) {
+      this._fitWhenSized = true;
+      return;
+    }
+
     const roots = [];
     if (this.ghostRobot) roots.push(this.ghostRobot);
     if (this.hardwareRobot) roots.push(this.hardwareRobot);
@@ -352,9 +367,10 @@ export class RobotViewer {
 
     if (!box || box.isEmpty()) return;
 
+    this._fitWhenSized = false;
+
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-
     const radius = Math.max(size.x, size.y, size.z, 0.4);
 
     this.orbit.target.copy(center);
@@ -503,18 +519,65 @@ export class RobotViewer {
 
   /* ---------------- Resize ---------------- */
 
-  _resize() {
+  _scheduleResize() {
+    if (this._resizeRaf) cancelAnimationFrame(this._resizeRaf);
+    this._resizeRaf = requestAnimationFrame(() => {
+      this._resizeRaf = 0;
+      this._resize();
+    });
+  }
+
+  _bindViewportListeners() {
+    window.addEventListener("resize", () => this._scheduleResize());
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", () => this._scheduleResize());
+    }
+
+    window.addEventListener("orientationchange", () => {
+      setTimeout(() => {
+        this._resize();
+        if (this.hardwareRobot || this.ghostRobot) this.fitToRobot();
+      }, 250);
+    });
+
+    if (typeof ResizeObserver !== "undefined") {
+      this._resizeObserver = new ResizeObserver(() => this._scheduleResize());
+      this._resizeObserver.observe(this.container);
+    }
+  }
+
+  _resize({ allowFit = true } = {}) {
 
     const rect = this.container.getBoundingClientRect();
+    // Use the real container size — do NOT invent a min height (old Math.max(320, …)
+    // broke camera.aspect on short landscape phones and pushed the robot off-center).
+    const width = rect.width;
+    const height = rect.height;
+    if (width < 2 || height < 2) return;
 
-    const width = Math.max(200, rect.width);
-    const height = Math.max(320, rect.height);
+    const sizeChanged =
+      Math.abs(width - this._viewWidth) >= 0.5
+      || Math.abs(height - this._viewHeight) >= 0.5;
 
+    if (!sizeChanged && !(allowFit && this._fitWhenSized)) return;
+
+    this._viewWidth = width;
+    this._viewHeight = height;
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.camera.aspect = width / height;
-
     this.camera.updateProjectionMatrix();
 
+    // updateStyle=false: drawing buffer matches CSS pixels; CSS keeps canvas filling #viewer
     this.renderer.setSize(width, height, false);
+    const canvas = this.renderer.domElement;
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+
+    if (allowFit && this._fitWhenSized && (this.hardwareRobot || this.ghostRobot)) {
+      this.fitToRobot();
+    }
 
   }
 
