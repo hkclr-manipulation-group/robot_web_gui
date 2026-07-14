@@ -26,7 +26,7 @@
     <collision>
       <origin rpy="0 -0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="meshes/base_link.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/base_link.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -46,7 +46,7 @@
     <collision>
       <origin rpy="0 -0 0" xyz="0 0 -0.084000000000000005"/>
       <geometry>
-        <mesh filename="meshes/L1.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/L1.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -66,7 +66,7 @@
     <collision>
       <origin rpy="1.5707963267948966 -0 1.5707963267948966" xyz="-0.084000000000000005 -0.096000000000000002 0"/>
       <geometry>
-        <mesh filename="meshes/L2.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/L2.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -86,7 +86,7 @@
     <collision>
       <origin rpy="1.5707963267948966 -0 1.5707963267948966" xyz="-0.43049999999999999 -0.096000000000000002 0"/>
       <geometry>
-        <mesh filename="meshes/L3.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/L3.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -106,7 +106,7 @@
     <collision>
       <origin rpy="1.5707963267948966 -0 1.5707963267948966" xyz="-0.58050000000000002 -0.096000000000000002 0"/>
       <geometry>
-        <mesh filename="meshes/L4.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/L4.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -126,7 +126,7 @@
     <collision>
       <origin rpy="1.5707963267948966 1.5707963267948966 0" xyz="0 0.58050000000000002 0"/>
       <geometry>
-        <mesh filename="meshes/L5.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/L5.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>
@@ -146,7 +146,7 @@
     <collision>
       <origin rpy="0 -0 -1.5707963267948966" xyz="0 0 -0.78049999999999997"/>
       <geometry>
-        <mesh filename="meshes/L6.obj" scale="0.001 0.001 0.001"/>
+        <mesh filename="meshes/L6.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
   </link>

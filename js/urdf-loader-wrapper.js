@@ -191,15 +191,35 @@ export async function loadRobotFromUrdf(url) {
   const manager = new THREE.LoadingManager();
   const loader = new URDFLoader(manager);
   loader.packages = url.includes("/") ? url.slice(0, url.lastIndexOf("/")) : ".";
+  // Viewer does not need collision meshes; keep false so we never double-fetch heavy assets.
+  loader.parseCollision = false;
   loader.loadMeshCb = (path, mgr, done) =>
     loadMeshWithObjSupport(loader, path, mgr, done);
 
   return await new Promise((resolve, reject) => {
     let captured = null;
+    let settled = false;
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn(value);
+    };
+
+    // iOS Safari can hang forever on a stalled mesh request — surface a timeout.
+    const timeoutMs = 120000;
+    const timer = setTimeout(() => {
+      finish(
+        reject,
+        new Error(`URDF load timed out after ${timeoutMs / 1000}s (${url}).`)
+      );
+    }, timeoutMs);
 
     manager.onLoad = () => {
       if (!captured) {
-        reject(
+        finish(
+          reject,
           new Error(
             `URDF: LoadingManager finished before URDF loader callback (${url}).`
           )
@@ -207,11 +227,11 @@ export async function loadRobotFromUrdf(url) {
         return;
       }
       applyUrdfMeshesShadowMetal(captured);
-      resolve(captured);
+      finish(resolve, captured);
     };
 
     manager.onError = (itemUrl) => {
-      reject(new Error(`Failed to load URDF dependency: ${itemUrl}`));
+      finish(reject, new Error(`Failed to load URDF dependency: ${itemUrl}`));
     };
 
     loader.load(
@@ -220,7 +240,8 @@ export async function loadRobotFromUrdf(url) {
         captured = robot;
       },
       undefined,
-      (error) => reject(error)
+      (error) =>
+        finish(reject, error instanceof Error ? error : new Error(String(error)))
     );
   });
 }

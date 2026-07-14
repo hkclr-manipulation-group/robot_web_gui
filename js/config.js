@@ -1,7 +1,7 @@
 export const DEFAULT_ROBOTS = [
-  { id: 'spark2', name: 'spark2_v1', mode: 'wifi', dof: 6 },
-  { id: 'spark2', name: 'spark2_v2', mode: 'wifi', dof: 6 },
   { id: 'spark2', name: 'spark2_v2_2', mode: 'wifi', dof: 6 },
+  { id: 'spark2', name: 'spark2_v2', mode: 'wifi', dof: 6 },
+  { id: 'spark2', name: 'spark2_v1', mode: 'wifi', dof: 6 },
 ];
 
 /** URDF path derived from robot `name` (folder under `./urdf/`). */
