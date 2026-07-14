@@ -36,7 +36,7 @@ export const IK_DEFAULTS = {
 export const PATH_DEFAULTS = {
   steps: 50,
   /** Delay between trajectory waypoints during play (`executeTrajectory` / Play Delay UI fallback). */
-  delayMs: 1000,
+  delayMs: 100,
 };
 
 /** 3D viewer display (see `main.js`, `viewer.js`). */
