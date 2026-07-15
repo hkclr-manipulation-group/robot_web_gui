@@ -379,7 +379,11 @@ export class JointsUI {
 
     slider.addEventListener("change", handleEnd);
     slider.addEventListener("mouseup", handleEnd);
+    slider.addEventListener("pointerup", handleEnd);
+    slider.addEventListener("pointercancel", handleEnd);
     slider.addEventListener("touchend", handleEnd);
+    // Scroll/gesture takeover on mobile often fires touchcancel instead of touchend.
+    slider.addEventListener("touchcancel", handleEnd);
     // 防止鼠标移出滑块区域后仍然持续移动
     slider.addEventListener("mouseleave", () => {
       // 鼠标移出时停止移动

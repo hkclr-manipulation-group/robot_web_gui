@@ -234,6 +234,58 @@
 
   <script>
     console.log("[robot_web_gui] inline script loaded — DOM and static scripts executed");
+
+    // Add ?debugViewport=1 to report viewport/media-query matches in a
+    // static server's request log (for example, python -m http.server).
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("debugViewport") !== "1") return;
+
+      const mediaChecks = [
+        ["tablet", "(max-width: 1280px)"],
+        ["narrow-phone", "(max-width: 600px)"],
+        ["compact-controls", "(max-width: 600px), (orientation: landscape) and (max-height: 520px)"],
+        ["phone-landscape", "(max-width: 820px) and (orientation: landscape), (orientation: landscape) and (max-height: 520px)"],
+        ["short-landscape", "(orientation: landscape) and (max-height: 520px)"],
+      ];
+
+      let lastReport = "";
+      let resizeTimer = 0;
+
+      const reportViewport = () => {
+        const matched = mediaChecks
+          .filter(([, query]) => window.matchMedia(query).matches)
+          .map(([name]) => name);
+
+        const report = new URLSearchParams({
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          dpr: String(window.devicePixelRatio || 1),
+          orientation: window.matchMedia("(orientation: landscape)").matches
+            ? "landscape"
+            : "portrait",
+          media: matched.length ? matched.join(",") : "default-desktop",
+        }).toString();
+
+        if (report === lastReport) return;
+        lastReport = report;
+
+        console.info(`[viewport-debug] ${decodeURIComponent(report)}`);
+
+        // Request an existing asset so http.server prints a successful GET.
+        fetch(`./image/favicon.ico?viewport-debug=1&${report}`, {
+          cache: "no-store",
+        }).catch(() => {});
+      };
+
+      window.addEventListener("load", reportViewport, { once: true });
+      window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(reportViewport, 300);
+      });
+      window.addEventListener("orientationchange", () => {
+        window.setTimeout(reportViewport, 300);
+      });
+    })();
   </script>
   <script type="module" src="./js/main.js"></script>
 </body>
