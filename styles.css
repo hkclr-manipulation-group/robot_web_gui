@@ -734,22 +734,20 @@ body.is-pseudo-fullscreen .layout {
   display: flex;
   flex-direction: column;
   justify-content: center;
-}
-.joint-card {
-  padding: 20px 16px;
+  padding: 14px 16px;
   width: 100%;
   box-sizing: border-box;
   background: #efefef;
   border-radius: 16px;
 }
+/* Teach mirror cards still use a separate top row */
 .joint-top {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: center;
-  /* top info row and lower controls vertical gap */
-  margin-bottom: 12px; /* 12px between top info row and progress/slider area */
-  line-height: 1.5; /* top info row line-height */
+  margin-bottom: 10px;
+  line-height: 1.5;
 }
 .joint-name {
   font-size: 16.52px;
@@ -757,7 +755,6 @@ body.is-pseudo-fullscreen .layout {
   font-weight: 400; /* Poppins Regular */
   color: #5F5F5F;
   word-break: break-word;
-  transform: translateY(18px); 
 }
 .joint-value {
   font-size: 16.6px;
@@ -770,39 +767,56 @@ body.is-pseudo-fullscreen .layout {
 }
 .joint-controls {
   display: grid;
-  /* minmax(0,…) avoids % + gap overflow; keeps both columns on one row */
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 12px;
-  align-items: center;
+  column-gap: 12px;
+  align-items: center; /* left stack ↔ slider, vertically centered as a group */
 }
 .joint-controls > * {
   min-width: 0; /* let range input shrink inside grid (defaults to min-content otherwise) */
 }
 
-/* Progress preview (left) — keep in-flow layout so grid/flex sizing stays predictable */
+/* Teach mirror: simple track under the top row */
 .progress-wrap {
   display: block;
   position: relative;
-  padding-top: 0px;
+  min-width: 0;
+}
+
+/*
+ * Joint / Task left column: name/value · progress · min/max
+ * Equal 1fr rows above/below the track keep the progress bar on the same
+ * horizontal centerline as the slider beside it.
+ */
+.joint-card:not(.teach-joint-card) .progress-wrap {
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  align-items: stretch;
+  min-height: 64px; /* match .slider-wrap so centers coincide */
+}
+.progress-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+.progress-head .joint-name {
+  min-width: 0;
+}
+.progress-head .joint-value {
+  flex: 0 0 auto;
 }
 .range-label { font-size: 11.9px; color: #000000; font-weight: 300; }
 .range-label.range-label-min { text-align: left; }
 .range-label.range-label-max { text-align: right; }
 .range-labels {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 6px;
-}
-
-/* place joint numeric value above and to the right of the progress track */
-.progress-wrap .joint-value {
-  position: absolute;
-  top: 0px;
-  right: 0;
-  transform: translateY(-150%);
-  background: transparent;
-  white-space: nowrap;
+  margin-top: 0;
+  min-height: 0;
 }
 .progress-track {
   height: 8px;
@@ -818,7 +832,7 @@ body.is-pseudo-fullscreen .layout {
   transition: width 0.06s linear;
 }
 
-/* Slider area (right) */
+/* Slider area (right) — same height as .progress-wrap for shared vertical center */
 .slider-wrap {
   width: 100%;
   display: flex;
@@ -907,12 +921,12 @@ body.is-pseudo-fullscreen .layout {
 }
 
 /*
- * Chrome / Edge / Safari：原生 range 与左侧进度条的中线相对 Firefox 偏下（Firefox 使用 -moz-range-track 已有位移）。
- * 仅对支持 ::-webkit-slider-thumb 的引擎整体上移 input，勿改伪元素 transform（Chrome 易绘制异常）。
+ * Chrome / Edge / Safari：原生 range 视觉中线相对 flex 中心略偏下。
+ * 仅整体上移 input，勿改伪元素 transform（Chrome 易绘制异常）。
  */
 @supports selector(::-webkit-slider-thumb) {
   .slider-wrap .slider-large {
-    transform: translateY(-12px);
+    transform: translateY(-4px);
   }
 }
 
@@ -1358,13 +1372,9 @@ body.is-pseudo-fullscreen .layout {
     font-size: 13px;
   }
 
-  .joint-name {
-    transform: none;
-  }
-
   .joint-controls {
     grid-template-columns: minmax(0, 1fr) minmax(86px, 0.8fr);
-    gap: 8px;
+    column-gap: 8px;
   }
 
   .topbar {
@@ -1483,41 +1493,6 @@ body.is-pseudo-fullscreen .layout {
     gap: 8px;
   }
 
-  /*
-   * Joint / Task: name + value share the same vertical anchor above the
-   * progress track (value position unchanged). Collapse .joint-top out of
-   * flow and place the name with the same top/transform as the value.
-   */
-  .joint-card:not(.teach-joint-card) .joint-top {
-    height: 0;
-    margin: 0;
-    padding: 0;
-    overflow: visible;
-    position: relative;
-    z-index: 2;
-    line-height: 0;
-  }
-
-  .joint-card:not(.teach-joint-card) .joint-name {
-    position: absolute;
-    left: 0;
-    top: 1.5em;
-    transform: translateY(-150%);
-    line-height: 1;
-    max-width: calc(100% - 4.5em);
-  }
-
-  .joint-card:not(.teach-joint-card) .progress-wrap {
-    position: relative;
-    padding-top: 1.5em;
-  }
-
-  .joint-card:not(.teach-joint-card) .progress-wrap .joint-value {
-    top: 1.5em;
-    right: 0;
-    transform: translateY(-150%);
-  }
-
   .fullscreen-btn {
     right: 8px;
     bottom: 8px;
@@ -1580,9 +1555,17 @@ body.is-pseudo-fullscreen .layout {
 
 /* Compact controls: match last committed phone slider sizing (max-width: 820px). */
 @media (max-width: 820px) {
+  .joint-controls {
+    column-gap: 8px;
+  }
+
+  .joint-card:not(.teach-joint-card) .progress-wrap {
+    min-height: 48px;
+  }
+
   .slider-wrap {
-    min-height: 42px;
-    height: 42px;
+    min-height: 48px;
+    height: 48px;
   }
 
   .slider-large {
@@ -1615,16 +1598,12 @@ body.is-pseudo-fullscreen .layout {
 
   @supports selector(::-webkit-slider-thumb) {
     .slider-wrap .slider-large {
-      transform: translateY(-6px);
+      transform: translateY(-3px);
     }
   }
 
   .progress-track {
     height: 6px;
-  }
-
-  .range-labels {
-    margin-top: 4px;
   }
 
   .range-label {

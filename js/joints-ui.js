@@ -189,9 +189,6 @@ export class JointsUI {
     const card = document.createElement("div");
     card.className = "joint-card";
 
-    const top = document.createElement("div");
-    top.className = "joint-top";
-
     const nameEl = document.createElement("div");
     nameEl.className = "joint-name";
     nameEl.textContent = name;
@@ -394,55 +391,54 @@ export class JointsUI {
     const controls = document.createElement("div");
     controls.className = "joint-controls";
 
-    // 1. Progress Preview (Left)
-    const progressWrap = document.createElement('div');
-    progressWrap.className = 'progress-wrap';
-    progressWrap.appendChild(valueEl);
+    // Left: name/value · track · min/max  |  Right: slider
+    const progressWrap = document.createElement("div");
+    progressWrap.className = "progress-wrap";
 
-    const progressTrack = document.createElement('div');
-    progressTrack.className = 'progress-track';
-    const progressFill = document.createElement('div');
-    progressFill.className = 'progress-fill';
-    
-    // 初始化进度条：映射到实际关节限位
+    const progressHead = document.createElement("div");
+    progressHead.className = "progress-head";
+    progressHead.appendChild(nameEl);
+    progressHead.appendChild(valueEl);
+
+    const progressTrack = document.createElement("div");
+    progressTrack.className = "progress-track";
+    const progressFill = document.createElement("div");
+    progressFill.className = "progress-fill";
+
     const toDeg = (r) => (r * 180) / Math.PI;
     const degCurrent = toDeg(current);
     const degMin = toDeg(range.min);
     const degMax = toDeg(range.max);
     const pctInit = (degCurrent - degMin) / (degMax - degMin || 1);
     progressFill.style.width = `${Math.max(0, Math.min(1, pctInit)) * 100}%`;
-    
+
     progressTrack.appendChild(progressFill);
 
-    // 标签：显示实际限位
-    const labelsRow = document.createElement('div');
-    labelsRow.className = 'range-labels';
-    
-    const minLabel = document.createElement('div');
-    minLabel.className = 'range-label range-label-min';
+    const labelsRow = document.createElement("div");
+    labelsRow.className = "range-labels";
+
+    const minLabel = document.createElement("div");
+    minLabel.className = "range-label range-label-min";
     minLabel.textContent = String(Math.round(toDeg(range.min))) + "°";
-    
-    const maxLabel = document.createElement('div');
-    maxLabel.className = 'range-label range-label-max';
+
+    const maxLabel = document.createElement("div");
+    maxLabel.className = "range-label range-label-max";
     maxLabel.textContent = String(Math.round(toDeg(range.max))) + "°";
-    
+
     labelsRow.appendChild(minLabel);
     labelsRow.appendChild(maxLabel);
 
+    progressWrap.appendChild(progressHead);
     progressWrap.appendChild(progressTrack);
     progressWrap.appendChild(labelsRow);
 
-    // 2. Slider (Right)
-    const sliderWrap = document.createElement('div');
-    sliderWrap.className = 'slider-wrap';
-    slider.className = 'slider-large';
+    const sliderWrap = document.createElement("div");
+    sliderWrap.className = "slider-wrap";
+    slider.className = "slider-large";
     sliderWrap.appendChild(slider);
 
     controls.appendChild(progressWrap);
     controls.appendChild(sliderWrap);
-
-    top.appendChild(nameEl);
-    card.appendChild(top);
     card.appendChild(controls);
 
     return card;
