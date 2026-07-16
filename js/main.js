@@ -795,26 +795,49 @@ function prepareRobotPair(path) {
   if (entry) return entry;
 
   entry = (async () => {
+    const t0 = performance.now();
+    const mark = (label) =>
+      console.log(`[URDF][pair] ${label} +${(performance.now() - t0).toFixed(1)}ms`);
+
+    console.log(`[URDF][pair] prepare start: ${path}`);
     const base = await loadRobotFromUrdf(path);
+    mark("loadRobotFromUrdf done");
+
     const hardware = base;
+    const cloneT0 = performance.now();
     const ghost = typeof base.clone === "function" ? base.clone(true) : base;
+    console.log(
+      `[URDF][pair] clone(true) ${(performance.now() - cloneT0).toFixed(1)}ms` +
+        (ghost === hardware ? " (NO clone — fallback path)" : ""),
+    );
 
     if (ghost === hardware) {
       // Fallback: loader without clone — load a second copy (slower).
       const second = await loadRobotFromUrdf(path);
+      mark("second loadRobotFromUrdf done");
+      const styleT0 = performance.now();
       cloneMaterialsPerMesh(hardware);
       cloneMaterialsPerMesh(second);
       applyHardwareContrastStyle(hardware);
       applyGhostVisualStyle(second);
+      console.log(
+        `[URDF][pair] materials/style ${(performance.now() - styleT0).toFixed(1)}ms`,
+      );
       robotPairReady.add(path);
+      mark("prepare DONE (fallback)");
       return { ghost: second, hardware };
     }
 
+    const styleT0 = performance.now();
     cloneMaterialsPerMesh(hardware);
     cloneMaterialsPerMesh(ghost);
     applyHardwareContrastStyle(hardware);
     applyGhostVisualStyle(ghost);
+    console.log(
+      `[URDF][pair] materials/style ${(performance.now() - styleT0).toFixed(1)}ms`,
+    );
     robotPairReady.add(path);
+    mark("prepare DONE");
     return { ghost, hardware };
   })();
 
@@ -845,13 +868,27 @@ function preloadBackgroundRobots(exceptName) {
 
 async function loadCurrentRobot(path) {
   const generation = ++robotLoadGeneration;
+  const t0 = performance.now();
+  const cached = robotPairReady.has(path);
+  console.log(
+    `[URDF][ui] loadCurrentRobot gen=${generation} path=${path} cached=${cached}`,
+  );
 
   try {
-    if (!robotPairReady.has(path)) setStatus("Loading URDF...", "warn");
+    if (!cached) setStatus("Loading URDF...", "warn");
 
     const { ghost, hardware } = await prepareRobotPair(path);
-    if (generation !== robotLoadGeneration) return false;
+    console.log(
+      `[URDF][ui] prepareRobotPair resolved +${(performance.now() - t0).toFixed(1)}ms gen=${generation}`,
+    );
+    if (generation !== robotLoadGeneration) {
+      console.warn(
+        `[URDF][ui] superseded after prepare (gen=${generation}, current=${robotLoadGeneration})`,
+      );
+      return false;
+    }
 
+    const mountT0 = performance.now();
     robotGhost = ghost;
     robotHardware = hardware;
     activeRobotPath = path;
@@ -868,11 +905,17 @@ async function loadCurrentRobot(path) {
 
     syncMeta();
 
+    console.log(
+      `[URDF][ui] mount/UI ${(performance.now() - mountT0).toFixed(1)}ms; total +${(performance.now() - t0).toFixed(1)}ms`,
+    );
     setStatus("URDF loaded.", "ok");
     return true;
   } catch (error) {
     if (generation !== robotLoadGeneration) return false;
-    console.error(error);
+    console.error(
+      `[URDF][ui] FAILED +${(performance.now() - t0).toFixed(1)}ms`,
+      error,
+    );
     setStatus(`Failed to load URDF: ${error.message || error}`, "danger-text");
     return false;
   }
