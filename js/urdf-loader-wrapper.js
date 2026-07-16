@@ -41,6 +41,85 @@ function meshShortName(path) {
 }
 
 /**
+ * GitHub Pages HTTP/2 often breaks when many medium/large binaries are multiplexed
+ * (net::ERR_HTTP2_PROTOCOL_ERROR). Serialize downloads there; allow more locally.
+ */
+const MESH_FETCH_CONCURRENCY =
+  typeof location !== "undefined" && /\.github\.io$/i.test(location.hostname)
+    ? 1
+    : 4;
+
+const meshFetchWaiters = [];
+let meshFetchActive = 0;
+
+function runMeshFetchTask(task) {
+  return new Promise((resolve, reject) => {
+    meshFetchWaiters.push({ task, resolve, reject });
+    pumpMeshFetchQueue();
+  });
+}
+
+function pumpMeshFetchQueue() {
+  while (meshFetchActive < MESH_FETCH_CONCURRENCY && meshFetchWaiters.length) {
+    const { task, resolve, reject } = meshFetchWaiters.shift();
+    meshFetchActive += 1;
+    Promise.resolve()
+      .then(task)
+      .then(resolve, reject)
+      .finally(() => {
+        meshFetchActive -= 1;
+        pumpMeshFetchQueue();
+      });
+  }
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * fetch + retry: survives GitHub Pages HTTP/2 glitches that leave XHR hung.
+ * Always settles so LoadingManager can itemEnd (avoids eternal "Loading URDF...").
+ */
+async function fetchBufferWithRetry(url, { short, retries = 4, timeoutMs = 45000 } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const t0 = performance.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const sep = url.includes("?") ? "&" : "?";
+      const reqUrl =
+        attempt === 1 ? url : `${url}${sep}_urdf_retry=${attempt}&_t=${Date.now()}`;
+      const res = await fetch(reqUrl, {
+        signal: controller.signal,
+        cache: attempt === 1 ? "default" : "reload",
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+      const buffer = await res.arrayBuffer();
+      console.log(
+        `[URDF][fetch] ${short} ok #${attempt} ${(performance.now() - t0).toFixed(1)}ms (${(buffer.byteLength / 1024).toFixed(1)} KB)`,
+      );
+      return buffer;
+    } catch (err) {
+      lastErr = err;
+      console.warn(
+        `[URDF][fetch] ${short} fail #${attempt}/${retries} ${(performance.now() - t0).toFixed(1)}ms`,
+        err?.message || err,
+      );
+      if (attempt < retries) await sleep(250 * attempt);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(String(lastErr ?? "fetch failed"));
+}
+
+/**
  * urdf-loader 默认只注册 STL / Collada；URDF 里用 .obj 时必须扩展 loadMeshCb。
  * @param {{ inFlight?: Set<string> } | null} track optional in-flight mesh set for stall logs
  */
@@ -72,20 +151,41 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
     done(object);
   };
 
+  /** Manual LoadingManager bookkeeping (we use fetch, not FileLoader). */
+  const withManagerItem = (url, promise) => {
+    const resolved = manager.resolveURL(url);
+    manager.itemStart(resolved);
+    return promise.then(
+      (value) => {
+        manager.itemEnd(resolved);
+        return value;
+      },
+      (err) => {
+        manager.itemError(resolved);
+        manager.itemEnd(resolved);
+        throw err;
+      },
+    );
+  };
+
   if (/\.obj$/i.test(path)) {
     const baseUrl = THREE.LoaderUtils.extractUrlBase(path);
-    const fileLoader = new THREE.FileLoader(manager);
 
-    fileLoader.load(
+    withManagerItem(
       path,
-      (text) => {
+      runMeshFetchTask(async () => {
+        const buffer = await fetchBufferWithRetry(path, { short });
+        return new TextDecoder().decode(buffer);
+      }),
+    )
+      .then((text) => {
         const fetchMs = (performance.now() - t0).toFixed(1);
-        const bytes =
-          typeof text === "string" ? text.length : text?.byteLength ?? "?";
-        console.log(`[URDF][obj] fetched ${short} ${fetchMs}ms (${bytes} chars)`);
+        console.log(
+          `[URDF][obj] fetched ${short} ${fetchMs}ms (${text.length} chars)`,
+        );
 
         const mtls = extractMtllibFiles(text);
-        const objLoader = new OBJLoader(manager);
+        const objLoader = new OBJLoader();
 
         const parseObj = (materialCreator) => {
           const parseT0 = performance.now();
@@ -118,6 +218,7 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
           );
         }
 
+        // MTLLoader still uses FileLoader+manager for the .mtl (small text).
         const mtlLoader = new MTLLoader(manager);
         mtlLoader.setPath(baseUrl);
         mtlLoader.setResourcePath(baseUrl);
@@ -139,37 +240,27 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
             parseObj(null);
           },
         );
-      },
-      undefined,
-      (err) => finishMesh(null, err),
-    );
+      })
+      .catch((err) => finishMesh(null, err));
     return;
   }
 
-  // STL: split network vs parse (defaultMeshLoader hides which is slow).
+  // STL via queued fetch+retry (avoids GH Pages HTTP/2 XHR hangs).
   if (/\.stl$/i.test(path)) {
-    const fileLoader = new THREE.FileLoader(manager);
-    fileLoader.setResponseType("arraybuffer");
-    fileLoader.load(
+    withManagerItem(
       path,
-      (buffer) => {
-        const fetchMs = performance.now() - t0;
-        const bytes = buffer?.byteLength ?? 0;
+      runMeshFetchTask(async () => {
+        const buffer = await fetchBufferWithRetry(path, { short });
         const parseT0 = performance.now();
-        try {
-          const geom = new STLLoader().parse(buffer);
-          const parseMs = performance.now() - parseT0;
-          console.log(
-            `[URDF][stl] ${short} fetch=${fetchMs.toFixed(1)}ms parse=${parseMs.toFixed(1)}ms (${(bytes / 1024).toFixed(1)} KB)`,
-          );
-          finishMesh(new THREE.Mesh(geom, new THREE.MeshPhongMaterial()));
-        } catch (err) {
-          finishMesh(null, err);
-        }
-      },
-      undefined,
-      (err) => finishMesh(null, err),
-    );
+        const geom = new STLLoader().parse(buffer);
+        console.log(
+          `[URDF][stl] ${short} parse=${(performance.now() - parseT0).toFixed(1)}ms (${(buffer.byteLength / 1024).toFixed(1)} KB)`,
+        );
+        return new THREE.Mesh(geom, new THREE.MeshPhongMaterial());
+      }),
+    )
+      .then((mesh) => finishMesh(mesh))
+      .catch((err) => finishMesh(null, err));
     return;
   }
 
@@ -278,7 +369,9 @@ function applyUrdfMeshesShadowMetal(robot) {
 export async function loadRobotFromUrdf(url) {
   const tLoad0 = performance.now();
   const track = { inFlight: new Set() };
-  console.log(`[URDF] loadRobotFromUrdf start: ${url}`);
+  console.log(
+    `[URDF] loadRobotFromUrdf start: ${url} (meshConcurrency=${MESH_FETCH_CONCURRENCY}, host=${typeof location !== "undefined" ? location.hostname : "?"})`,
+  );
 
   const manager = new THREE.LoadingManager();
   const loader = new URDFLoader(manager);
