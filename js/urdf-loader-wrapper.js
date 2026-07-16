@@ -40,14 +40,14 @@ function meshShortName(path) {
   }
 }
 
+const ON_GITHUB_PAGES =
+  typeof location !== "undefined" && /\.github\.io$/i.test(location.hostname);
+
 /**
- * GitHub Pages HTTP/2 often breaks when many medium/large binaries are multiplexed
- * (net::ERR_HTTP2_PROTOCOL_ERROR). Serialize downloads there; allow more locally.
+ * Pages origin is slow for multi‑MB STL; pull binaries from jsDelivr (same git repo).
+ * Concurrency 2 is a balance: faster than serial, less HTTP/2 breakage than 6+.
  */
-const MESH_FETCH_CONCURRENCY =
-  typeof location !== "undefined" && /\.github\.io$/i.test(location.hostname)
-    ? 1
-    : 4;
+const MESH_FETCH_CONCURRENCY = ON_GITHUB_PAGES ? 2 : 4;
 
 const meshFetchWaiters = [];
 let meshFetchActive = 0;
@@ -78,10 +78,39 @@ function sleep(ms) {
 }
 
 /**
+ * Project Pages URL `/<repo>/urdf/...` → jsDelivr `gh/<owner>/<repo>@main/urdf/...`
+ * Localhost / non-Pages hosts keep the original relative path.
+ */
+function toCdnMeshUrl(path) {
+  if (!ON_GITHUB_PAGES || typeof location === "undefined") return null;
+  try {
+    const abs = new URL(path, location.href);
+    const parts = abs.pathname.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    const repo = parts[0];
+    const repoPath = parts.slice(1).join("/");
+    const owner = location.hostname.split(".")[0];
+    if (!owner || !repo || !repoPath) return null;
+    return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@main/${repoPath}`;
+  } catch {
+    return null;
+  }
+}
+
+function absolutePageUrl(path) {
+  if (typeof location === "undefined") return path;
+  try {
+    return new URL(path, location.href).href;
+  } catch {
+    return path;
+  }
+}
+
+/**
  * fetch + retry: survives GitHub Pages HTTP/2 glitches that leave XHR hung.
  * Always settles so LoadingManager can itemEnd (avoids eternal "Loading URDF...").
  */
-async function fetchBufferWithRetry(url, { short, retries = 4, timeoutMs = 45000 } = {}) {
+async function fetchBufferWithRetry(url, { short, retries = 3, timeoutMs = 90000 } = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= retries; attempt++) {
     const t0 = performance.now();
@@ -100,16 +129,16 @@ async function fetchBufferWithRetry(url, { short, retries = 4, timeoutMs = 45000
       }
       const buffer = await res.arrayBuffer();
       console.log(
-        `[URDF][fetch] ${short} ok #${attempt} ${(performance.now() - t0).toFixed(1)}ms (${(buffer.byteLength / 1024).toFixed(1)} KB)`,
+        `[URDF][fetch] ${short} ok #${attempt} ${(performance.now() - t0).toFixed(1)}ms (${(buffer.byteLength / 1024).toFixed(1)} KB) ← ${url}`,
       );
       return buffer;
     } catch (err) {
       lastErr = err;
       console.warn(
-        `[URDF][fetch] ${short} fail #${attempt}/${retries} ${(performance.now() - t0).toFixed(1)}ms`,
+        `[URDF][fetch] ${short} fail #${attempt}/${retries} ${(performance.now() - t0).toFixed(1)}ms ← ${url}`,
         err?.message || err,
       );
-      if (attempt < retries) await sleep(250 * attempt);
+      if (attempt < retries) await sleep(300 * attempt);
     } finally {
       clearTimeout(timer);
     }
@@ -117,6 +146,31 @@ async function fetchBufferWithRetry(url, { short, retries = 4, timeoutMs = 45000
   throw lastErr instanceof Error
     ? lastErr
     : new Error(String(lastErr ?? "fetch failed"));
+}
+
+/** Prefer CDN on GitHub Pages; fall back to Pages origin if CDN fails. */
+async function fetchMeshBuffer(path, { short } = {}) {
+  const pageUrl = absolutePageUrl(path);
+  const cdnUrl = toCdnMeshUrl(path);
+  const sources = cdnUrl && cdnUrl !== pageUrl ? [cdnUrl, pageUrl] : [pageUrl];
+
+  let lastErr;
+  for (let i = 0; i < sources.length; i++) {
+    const url = sources[i];
+    if (i === 0 && cdnUrl) {
+      console.log(`[URDF][cdn] ${short} try ${url}`);
+    } else if (i > 0) {
+      console.warn(`[URDF][cdn] ${short} fallback → ${url}`);
+    }
+    try {
+      return await fetchBufferWithRetry(url, { short, retries: 3, timeoutMs: 90000 });
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(String(lastErr ?? "mesh fetch failed"));
 }
 
 /**
@@ -169,12 +223,15 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
   };
 
   if (/\.obj$/i.test(path)) {
-    const baseUrl = THREE.LoaderUtils.extractUrlBase(path);
+    // Prefer CDN directory so relative .mtl / textures also hit the fast host.
+    const assetBase =
+      toCdnMeshUrl(path)?.replace(/[^/]+$/, "") ||
+      THREE.LoaderUtils.extractUrlBase(absolutePageUrl(path));
 
     withManagerItem(
       path,
       runMeshFetchTask(async () => {
-        const buffer = await fetchBufferWithRetry(path, { short });
+        const buffer = await fetchMeshBuffer(path, { short });
         return new TextDecoder().decode(buffer);
       }),
     )
@@ -220,8 +277,8 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
 
         // MTLLoader still uses FileLoader+manager for the .mtl (small text).
         const mtlLoader = new MTLLoader(manager);
-        mtlLoader.setPath(baseUrl);
-        mtlLoader.setResourcePath(baseUrl);
+        mtlLoader.setPath(assetBase);
+        mtlLoader.setResourcePath(assetBase);
         const mtlT0 = performance.now();
 
         mtlLoader.load(
@@ -245,12 +302,12 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
     return;
   }
 
-  // STL via queued fetch+retry (avoids GH Pages HTTP/2 XHR hangs).
+  // STL via queued CDN fetch+retry (Pages origin is too slow for multi‑MB binaries).
   if (/\.stl$/i.test(path)) {
     withManagerItem(
       path,
       runMeshFetchTask(async () => {
-        const buffer = await fetchBufferWithRetry(path, { short });
+        const buffer = await fetchMeshBuffer(path, { short });
         const parseT0 = performance.now();
         const geom = new STLLoader().parse(buffer);
         console.log(
@@ -370,7 +427,7 @@ export async function loadRobotFromUrdf(url) {
   const tLoad0 = performance.now();
   const track = { inFlight: new Set() };
   console.log(
-    `[URDF] loadRobotFromUrdf start: ${url} (meshConcurrency=${MESH_FETCH_CONCURRENCY}, host=${typeof location !== "undefined" ? location.hostname : "?"})`,
+    `[URDF] loadRobotFromUrdf start: ${url} (meshConcurrency=${MESH_FETCH_CONCURRENCY}, host=${typeof location !== "undefined" ? location.hostname : "?"}, cdnMeshes=${ON_GITHUB_PAGES})`,
   );
 
   const manager = new THREE.LoadingManager();
