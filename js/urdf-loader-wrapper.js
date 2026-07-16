@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import URDFLoader from "urdf-loader";
 
 /** OBJ+MTL 网格不打硬件金属覆盖，见 applyUrdfMeshesShadowMetal / applyHardwareContrastStyle */
@@ -138,6 +139,33 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
             parseObj(null);
           },
         );
+      },
+      undefined,
+      (err) => finishMesh(null, err),
+    );
+    return;
+  }
+
+  // STL: split network vs parse (defaultMeshLoader hides which is slow).
+  if (/\.stl$/i.test(path)) {
+    const fileLoader = new THREE.FileLoader(manager);
+    fileLoader.setResponseType("arraybuffer");
+    fileLoader.load(
+      path,
+      (buffer) => {
+        const fetchMs = performance.now() - t0;
+        const bytes = buffer?.byteLength ?? 0;
+        const parseT0 = performance.now();
+        try {
+          const geom = new STLLoader().parse(buffer);
+          const parseMs = performance.now() - parseT0;
+          console.log(
+            `[URDF][stl] ${short} fetch=${fetchMs.toFixed(1)}ms parse=${parseMs.toFixed(1)}ms (${(bytes / 1024).toFixed(1)} KB)`,
+          );
+          finishMesh(new THREE.Mesh(geom, new THREE.MeshPhongMaterial()));
+        } catch (err) {
+          finishMesh(null, err);
+        }
       },
       undefined,
       (err) => finishMesh(null, err),
