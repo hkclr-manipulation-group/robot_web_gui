@@ -87,6 +87,8 @@ let robotGhost = null;
 let ghostCommandPending = false;
 /** Teach tab (`planning` page) active — ghost robot stays hidden while true. */
 let teachTabActive = false;
+/** Populated in createTeachModule(); null until then (avoids TDZ in early sync helpers). */
+let teach = null;
 /** Duplicate URDF driven by streamed joint telemetry (full materials). */
 let robotHardware = null;
 let kinematics = null;
@@ -189,6 +191,17 @@ function noteGhostShowsCommandAheadOfTelemetry() {
   }
 }
 
+/** Teach 关节角与 Joint Space 共用同一套数值源。 */
+function syncTeachMirrorFromJointMap(map) {
+  if (!map || !teach) return;
+  teach.syncTeachJointMirror(map);
+}
+
+function syncTeachMirrorFromJointVector(q) {
+  if (!q?.length || !kinematics) return;
+  syncTeachMirrorFromJointMap(vectorToMap(q));
+}
+
 /** 无用户目标时：ghost / 指令状态跟遥测对齐（连接后不应留在 URDF 零位）。 */
 function syncCommandStateFromTelemetry(telemJoint, options = {}) {
   if (!kinematics || !robotGhost || !telemJoint?.length) return;
@@ -202,6 +215,7 @@ function syncCommandStateFromTelemetry(telemJoint, options = {}) {
     kinematics.setJointVector(q);
     if (syncJointUi) {
       jointsUI.syncFromStreamData(q, { updateGhostUrdfJoints: false });
+      syncTeachMirrorFromJointVector(q);
     }
     refreshPoseReadout();
     syncTaskUiFromRobot();
@@ -226,6 +240,7 @@ function refreshGhostVersusTelemetry(telemJoint) {
   const updateGhostUrdfJoints = !hardwareActive || aligned;
 
   jointsUI.syncFromStreamData(telemJoint, { updateGhostUrdfJoints });
+  syncTeachMirrorFromJointVector(telemJoint);
   applyGhostRobotVisibility(hardwareActive ? !aligned : true);
 
   if (aligned) {
@@ -244,6 +259,7 @@ function applyLocalJointMap(map) {
     syncTaskUiFromRobot();
     syncViewerFromRobot();
     noteGhostShowsCommandAheadOfTelemetry();
+    syncTeachMirrorFromJointMap(map);
   });
 }
 
@@ -434,6 +450,8 @@ function applyJointVector(q, options = {}) {
 
     if (syncJointUi) {
       jointsUI.setValuesByMap(map, true);
+      // Teach mirror follows the same joint values as Joint Space.
+      syncTeachMirrorFromJointMap(map);
     }
 
     noteGhostShowsCommandAheadOfTelemetry();
@@ -537,6 +555,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
           syncTaskUiFromRobot();
           syncViewerFromRobot();
           noteGhostShowsCommandAheadOfTelemetry();
+          syncTeachMirrorFromJointMap(currentMap);
         });
         if (!isHardwareControlActive()) {
           setStatus("Simulation: joint command sent to rt_control.", "ok");
@@ -585,6 +604,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
     refreshPoseReadout();
     syncTaskUiFromRobot();
     syncViewerFromRobot();
+    syncTeachMirrorFromJointMap(map);
     
     console.log(`[onJointCommitted] ${name}: Sending command to backend...`);
     try {
@@ -864,7 +884,7 @@ function clearDisplayedRobot() {
   kinematicsLab?.setRobotContext(null);
   jointsUI.clear();
   // {} clears teach mirror; null would fall back to getRecordJointMap().
-  teach.syncTeachJointMirror({});
+  teach?.syncTeachJointMirror({});
 
   if (baseLinkEl) baseLinkEl.textContent = "—";
   if (tipLinkEl) tipLinkEl.textContent = "—";
@@ -1005,7 +1025,7 @@ async function loadCurrentRobot(path) {
     kinematicsLab?.setRobotContext(kinematics);
 
     jointsUI.build(robotGhost);
-    teach.syncTeachJointMirror();
+    syncTeachMirrorFromJointMap(kinematics.getCurrentJointMap());
 
     syncMeta();
 
@@ -1136,7 +1156,6 @@ async function executeTrajectory(trajectory) {
       syncTaskUi: true,
       syncViewer: true,
     });
-    teach.syncTeachJointMirror(map);
 
     const teachInterp =
       i === 0
@@ -1189,7 +1208,7 @@ function getTeachRecordJointMap() {
   return kinematics.getCurrentJointMap();
 }
 
-const teach = createTeachModule({
+teach = createTeachModule({
   elements: {
     teachCountEl,
     pathPreviewEl,
@@ -1371,7 +1390,8 @@ function bindCardTabs() {
       teachTabActive = teachActive;
       viewerPanelEl?.classList.toggle("teach-active", teachActive);
       if (teachActive) {
-        teach.syncTeachJointMirror();
+        // Match Joint Space: prefer current command/kinematics pose over stale telemetry.
+        syncTeachMirrorFromJointMap(kinematics?.getCurrentJointMap() ?? null);
         applyGhostRobotVisibility(true);
       } else if (latestJointPosition?.length) {
         refreshGhostVersusTelemetry(latestJointPosition);
@@ -1483,7 +1503,6 @@ function connectStream(url) {
           viewer.setHardwareRobotVisible(true);
         }
         refreshGhostVersusTelemetry(jointPosition);
-        teach.syncTeachJointMirror();
       }
     } catch (error) {
       console.error("Failed to parse stream payload:", error, event.data);

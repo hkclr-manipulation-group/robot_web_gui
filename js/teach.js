@@ -110,6 +110,31 @@ export function createTeachModule(options) {
     }
 
     const entries = Object.entries(map).reverse();
+    const existingCards = jointContainerTeachEl.querySelectorAll(".teach-joint-card");
+
+    // Same joint set: update values in place (matches Joint Space drag/stream cadence).
+    if (existingCards.length === entries.length) {
+      let namesMatch = true;
+      for (let i = 0; i < entries.length; i++) {
+        const nameEl = existingCards[i].querySelector(".joint-name");
+        if (!nameEl || nameEl.textContent !== entries[i][0]) {
+          namesMatch = false;
+          break;
+        }
+      }
+
+      if (namesMatch) {
+        entries.forEach(([_, value], i) => {
+          const card = existingCards[i];
+          const valueEl = card.querySelector(".joint-value");
+          const progressFill = card.querySelector(".progress-fill");
+          if (valueEl) valueEl.textContent = formatJointValue(value);
+          if (progressFill) progressFill.style.width = jointProgress(value);
+        });
+        return;
+      }
+    }
+
     const fragment = document.createDocumentFragment();
 
     entries.forEach(([name, value]) => {
