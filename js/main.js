@@ -782,9 +782,88 @@ viewer.callbacks.onTaskMove = (pose) => {
 const robotPairCache = new Map();
 /** Paths whose pair has finished preparing (instant switch, no loading status) */
 const robotPairReady = new Set();
+/** path -> Set<(info) => void> progress listeners for in-flight prepares */
+const robotPairProgressListeners = new Map();
 /** Ignore superseded async loads when the user switches robots quickly */
 let robotLoadGeneration = 0;
 let activeRobotPath = null;
+
+function robotNameFromUrdfPath(path) {
+  const parts = String(path || "").split("/").filter(Boolean);
+  // ./urdf/<name>/robot.urdf
+  if (parts.length >= 2 && parts[parts.length - 1] === "robot.urdf") {
+    return parts[parts.length - 2];
+  }
+  return parts[parts.length - 1] || path;
+}
+
+function subscribeRobotPairProgress(path, fn) {
+  if (!fn) return () => {};
+  let set = robotPairProgressListeners.get(path);
+  if (!set) {
+    set = new Set();
+    robotPairProgressListeners.set(path, set);
+  }
+  set.add(fn);
+  return () => {
+    set.delete(fn);
+    if (!set.size) robotPairProgressListeners.delete(path);
+  };
+}
+
+function emitRobotPairProgress(path, info) {
+  const set = robotPairProgressListeners.get(path);
+  if (!set?.size) return;
+  for (const fn of set) {
+    try {
+      fn(info);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function formatUrdfLoadStatus(robotName, info = {}) {
+  const name = robotName || "URDF";
+  if (info.phase === "prepare") {
+    return `Loading ${name}… preparing model`;
+  }
+  const loaded = Number(info.loaded) || 0;
+  const total = Number(info.total) || 0;
+  const downloading = Array.isArray(info.downloading) ? info.downloading : [];
+  const current =
+    downloading.length > 0
+      ? downloading.slice(0, 2).join(", ")
+      : info.file || "";
+  if (total > 0) {
+    const pct = Math.min(100, Math.round((loaded / total) * 100));
+    return current
+      ? `Loading ${name}… ${loaded}/${total} (${pct}%) — ${current}`
+      : `Loading ${name}… ${loaded}/${total} (${pct}%)`;
+  }
+  if (current) return `Loading ${name}… ${current}`;
+  return `Loading ${name}…`;
+}
+
+/**
+ * Detach the on-screen robot so the dropdown name and 3D model stay consistent
+ * while a new URDF loads. Does NOT dispose or drop robotPairCache (keeps speed).
+ */
+function clearDisplayedRobot() {
+  robotGhost = null;
+  robotHardware = null;
+  activeRobotPath = null;
+  kinematics = null;
+
+  viewer.setDualRobot(null, null);
+  kinematicsLab?.setRobotContext(null);
+  jointsUI.clear();
+  // {} clears teach mirror; null would fall back to getRecordJointMap().
+  teach.syncTeachJointMirror({});
+
+  if (baseLinkEl) baseLinkEl.textContent = "—";
+  if (tipLinkEl) tipLinkEl.textContent = "—";
+}
 
 /**
  * Load URDF once, clone for ghost/hardware, cache the prepared pair.
@@ -800,8 +879,11 @@ function prepareRobotPair(path) {
       console.log(`[URDF][pair] ${label} +${(performance.now() - t0).toFixed(1)}ms`);
 
     console.log(`[URDF][pair] prepare start: ${path}`);
-    const base = await loadRobotFromUrdf(path);
+    const base = await loadRobotFromUrdf(path, {
+      onProgress: (info) => emitRobotPairProgress(path, info),
+    });
     mark("loadRobotFromUrdf done");
+    emitRobotPairProgress(path, { phase: "prepare" });
 
     const hardware = base;
     const cloneT0 = performance.now();
@@ -813,8 +895,11 @@ function prepareRobotPair(path) {
 
     if (ghost === hardware) {
       // Fallback: loader without clone — load a second copy (slower).
-      const second = await loadRobotFromUrdf(path);
+      const second = await loadRobotFromUrdf(path, {
+        onProgress: (info) => emitRobotPairProgress(path, info),
+      });
       mark("second loadRobotFromUrdf done");
+      emitRobotPairProgress(path, { phase: "prepare" });
       const styleT0 = performance.now();
       cloneMaterialsPerMesh(hardware);
       cloneMaterialsPerMesh(second);
@@ -870,13 +955,27 @@ async function loadCurrentRobot(path) {
   const generation = ++robotLoadGeneration;
   const t0 = performance.now();
   const cached = robotPairReady.has(path);
+  const robotName = robotNameFromUrdfPath(path);
   console.log(
     `[URDF][ui] loadCurrentRobot gen=${generation} path=${path} cached=${cached}`,
   );
 
-  try {
-    if (!cached) setStatus("Loading URDF...", "warn");
+  // Drop the previous on-screen model as soon as the dropdown changes so the
+  // viewer never disagrees with the selected name. Cache is kept for speed.
+  if (activeRobotPath !== path) {
+    clearDisplayedRobot();
+  }
+  if (!cached) {
+    setStatus(formatUrdfLoadStatus(robotName, { phase: "start" }), "warn");
+  }
 
+  const unsubProgress = subscribeRobotPairProgress(path, (info) => {
+    if (generation !== robotLoadGeneration) return;
+    if (robotPairReady.has(path)) return;
+    setStatus(formatUrdfLoadStatus(robotName, info), "warn");
+  });
+
+  try {
     const { ghost, hardware } = await prepareRobotPair(path);
     console.log(
       `[URDF][ui] prepareRobotPair resolved +${(performance.now() - t0).toFixed(1)}ms gen=${generation}`,
@@ -908,7 +1007,7 @@ async function loadCurrentRobot(path) {
     console.log(
       `[URDF][ui] mount/UI ${(performance.now() - mountT0).toFixed(1)}ms; total +${(performance.now() - t0).toFixed(1)}ms`,
     );
-    setStatus("URDF loaded.", "ok");
+    setStatus(`URDF loaded: ${robotName}.`, "ok");
     return true;
   } catch (error) {
     if (generation !== robotLoadGeneration) return false;
@@ -918,6 +1017,8 @@ async function loadCurrentRobot(path) {
     );
     setStatus(`Failed to load URDF: ${error.message || error}`, "danger-text");
     return false;
+  } finally {
+    unsubProgress();
   }
 }
 

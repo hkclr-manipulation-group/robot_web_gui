@@ -181,10 +181,12 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
   const short = meshShortName(path);
   const t0 = performance.now();
   track?.inFlight?.add(path);
+  track?.onMeshChange?.();
   console.log(`[URDF][mesh] start ${short}`);
 
   const finishMesh = (object, err) => {
     track?.inFlight?.delete(path);
+    track?.onMeshChange?.();
     const ms = (performance.now() - t0).toFixed(1);
     if (err) {
       console.warn(`[URDF][mesh] FAIL ${short} ${ms}ms`, err);
@@ -423,9 +425,40 @@ function applyUrdfMeshesShadowMetal(robot) {
   });
 }
 
-export async function loadRobotFromUrdf(url) {
+/**
+ * @param {string} url
+ * @param {{ onProgress?: (info: {
+ *   phase: string,
+ *   loaded: number,
+ *   total: number,
+ *   file?: string,
+ *   downloading?: string[],
+ * }) => void }} [options]
+ */
+export async function loadRobotFromUrdf(url, { onProgress } = {}) {
   const tLoad0 = performance.now();
-  const track = { inFlight: new Set() };
+  let lastProgress = { loaded: 0, total: 0, url: "" };
+
+  const emitProgress = (phase = "assets") => {
+    if (!onProgress) return;
+    try {
+      onProgress({
+        phase,
+        loaded: lastProgress.loaded,
+        total: lastProgress.total,
+        file: lastProgress.url ? meshShortName(lastProgress.url) : "",
+        downloading: [...track.inFlight].map(meshShortName),
+      });
+    } catch {
+      /* UI callback must not break load */
+    }
+  };
+
+  const track = {
+    inFlight: new Set(),
+    onMeshChange: () => emitProgress("assets"),
+  };
+
   console.log(
     `[URDF] loadRobotFromUrdf start: ${url} (meshConcurrency=${MESH_FETCH_CONCURRENCY}, host=${typeof location !== "undefined" ? location.hostname : "?"}, cdnMeshes=${ON_GITHUB_PAGES})`,
   );
@@ -438,11 +471,12 @@ export async function loadRobotFromUrdf(url) {
   loader.loadMeshCb = (path, mgr, done) =>
     loadMeshWithObjSupport(loader, path, mgr, done, track);
 
+  emitProgress("start");
+
   return await new Promise((resolve, reject) => {
     let captured = null;
     let settled = false;
     let robotCbAt = null;
-    let lastProgress = { loaded: 0, total: 0, url: "" };
 
     const finish = (fn, value) => {
       if (settled) return;
@@ -452,9 +486,11 @@ export async function loadRobotFromUrdf(url) {
     };
 
     manager.onStart = (itemUrl, loaded, total) => {
+      lastProgress = { loaded, total, url: itemUrl };
       console.log(
         `[URDF][mgr] onStart first=${meshShortName(itemUrl)} (${loaded}/${total}) +${(performance.now() - tLoad0).toFixed(0)}ms`,
       );
+      emitProgress("assets");
     };
 
     manager.onProgress = (itemUrl, loaded, total) => {
@@ -462,6 +498,7 @@ export async function loadRobotFromUrdf(url) {
       console.log(
         `[URDF][mgr] ${loaded}/${total} ${meshShortName(itemUrl)} +${(performance.now() - tLoad0).toFixed(0)}ms`,
       );
+      emitProgress("assets");
     };
 
     manager.onLoad = () => {
