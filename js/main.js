@@ -355,13 +355,11 @@ function updateConnectionUi(kind = "preview") {
   if (kind === "connect") {
     connectionBadgeEl.classList.add("badge-ok");
     connectionBadgeEl.textContent = "connected";
-  } else if (kind === "disconnect") {
+  } else if (kind === "disconnect" || kind === "ready") {
+    // Gateway on, hardware off → rt_control simulation
     connectionBadgeEl.classList.add("badge-muted");
-    connectionBadgeEl.textContent = "disconnect";
-  } else if (kind === "ready") {
-    connectionBadgeEl.classList.add("badge-muted");
-    connectionBadgeEl.textContent = "ready";
-  }  else if (kind === "warn") {
+    connectionBadgeEl.textContent = "simulation";
+  } else if (kind === "warn") {
     connectionBadgeEl.classList.add("badge-warn");
     connectionBadgeEl.textContent = "preview";
   } else if (kind === "danger") {
@@ -743,7 +741,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
         setStatus(
           isHardwareControlActive()
             ? "Task-space incremental command sent."
-            : "Simulation: incremental command sent to rt_control.",
+            : "Simulation: Task-space incremental command sent to rt_control.",
           "ok"
         );
       } else if (result.data && !result.data.success) {
@@ -1114,16 +1112,16 @@ async function connectSelectedRobot() {
     updateConnectionUi(result.mode === "preview" ? "warn" : "connect");
 
     if (result.mode === "preview") {
-      setStatus("Preview mode active. No gateway configured.", "warn");
+      setStatus("This is currently in preview mode. Please configure the gateway and try again.", "warn");
     }else if (result.data.success) {
-      setStatus("Robot connected to hardware.", "ok");
+      setStatus("Successfully connected to robot.", "ok");
       ghostCommandPending = false;
       if (latestJointPosition?.length) {
         syncCommandStateFromTelemetry(latestJointPosition);
         applyGhostRobotVisibility(false);
       }
     }else if (!result.data.success) {
-      setStatus(`Failed to connect to hardware. ${result.data.message}`, "danger-text");
+      setStatus(`Failed to connect to robot. ${result.data.message}`, "danger-text");
     }
 
   } catch (error) {
@@ -1283,7 +1281,7 @@ function bindButtons() {
       if (result.mode === "preview") {
         setStatus("Preview mode active. No gateway configured.", "warn");
       }else if (result.data.success) {
-        setStatus("Robot disconnected — rt_control simulation active (solid arm follows stream).", "ok");
+        setStatus("Robot disconnected — rt_control simulation active.", "ok");
         ghostCommandPending = false;
         if (latestJointPosition?.length) {
           syncCommandStateFromTelemetry(latestJointPosition);
