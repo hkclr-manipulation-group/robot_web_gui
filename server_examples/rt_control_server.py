@@ -157,7 +157,7 @@ def ensure_robot_runtime():
             return True, "Success"
         try:
             robot_instance = _get_robot()
-            robot_instance.start()
+            robot_instance.start_stream()
             robot_started = True
             teach_active = False
         except Exception:
