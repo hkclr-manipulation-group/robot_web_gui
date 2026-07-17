@@ -109,7 +109,9 @@ let latestJointPosition = null; // latest joint_pos from /stream
 /* Utilities                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/** Status bar helper. cls: "ok" | "warn" | "danger-text" | "" */
 function setStatus(text, cls = "") {
+  if (!statusEl) return;
   statusEl.textContent = text;
   statusEl.className = `status-text ${cls}`.trim();
 }
@@ -605,7 +607,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
         console.log(`[onJointCommitted] ${name}: ✅ Command succeeded`);
         noteGhostShowsCommandAheadOfTelemetry();
       } else if (result.data && !result.data.success) {
-        setStatus(`Failed to sent joint command. ${result.data.message}`, "danger-text");
+        setStatus(`Failed to send joint command. ${result.data.message}`, "danger-text");
         console.error(`[onJointCommitted] ${name}: ❌ Command failed: ${result.data.message}`);
       } else {
         console.warn(`[onJointCommitted] ${name}: Unexpected result format:`, result);
@@ -645,7 +647,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     });
 
     if (!ok) {
-      setStatus("IK solve failed for task move.", "warn");
+      setStatus("IK solve failed for task move.", "danger-text");
       return;
     }
 
@@ -701,7 +703,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     });
 
     if (!ok) {
-      setStatus("IK solve failed for task jog.", "warn");
+      setStatus("IK solve failed for task jog.", "danger-text");
       return;
     }
 
@@ -746,7 +748,8 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   intervalMs: 1000,     // 连续调节的时间间隔（毫秒），可根据需要调整
   stepTrans: 0.01,     // 平移每次步进的米数，可根据需要调整
   stepRot: 1,          // 旋转每次步进的角度，可根据需要调整
-  controlMode: 0       // 默认控制模式：1=绝对位姿, 0=增量位姿
+  controlMode: 0,      // 默认控制模式：1=绝对位姿, 0=增量位姿
+  setStatus,
 });
 
 taskUI.build();
@@ -770,7 +773,7 @@ viewer.callbacks.onTaskMove = (pose) => {
   });
 
   if (!ok) {
-    setStatus("IK solve failed for dragged target.", "warn");
+    setStatus("IK solve failed for dragged target.", "danger-text");
   }
 };
 
@@ -825,8 +828,10 @@ function emitRobotPairProgress(path, info) {
 
 function formatUrdfLoadStatus(robotName, info = {}) {
   const name = robotName || "URDF";
-  if (info.phase === "prepare") {
-    return `Loading ${name}… preparing model`;
+  if (info.phase === "prepare" || info.phase === "start") {
+    return info.phase === "prepare"
+      ? `Loading ${name}… preparing model`
+      : `Loading ${name}…`;
   }
   const loaded = Number(info.loaded) || 0;
   const total = Number(info.total) || 0;
@@ -1007,7 +1012,6 @@ async function loadCurrentRobot(path) {
     console.log(
       `[URDF][ui] mount/UI ${(performance.now() - mountT0).toFixed(1)}ms; total +${(performance.now() - t0).toFixed(1)}ms`,
     );
-    setStatus(`URDF loaded: ${robotName}.`, "ok");
     return true;
   } catch (error) {
     if (generation !== robotLoadGeneration) return false;
@@ -1057,7 +1061,11 @@ async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
 
   if (loaded) {
     preloadBackgroundRobots(robot.name);
-    if (announce) setStatus(`Loaded URDF for ${robot.name}.`, "ok");
+    // Always clear the in-progress "Loading…" line; announce only affects wording.
+    setStatus(
+      announce ? `URDF loaded: ${robot.name}.` : "Ready.",
+      announce ? "ok" : ""
+    );
   }
   return loaded;
 }
@@ -1262,7 +1270,7 @@ function bindButtons() {
           syncCommandStateFromTelemetry(latestJointPosition);
         }
       }else if (!result.data.success) {
-        setStatus(`Failed to connect to hardware. ${result.data.message}`, "danger-text");
+        setStatus(`Failed to disconnect from hardware. ${result.data.message}`, "danger-text");
       }
       
     } catch (error) {
@@ -1484,6 +1492,11 @@ function connectStream(url) {
 
   robotStream.onerror = (err) => {
     console.error("Stream failed:", err);
+    updateConnectionUi("danger");
+    if (lastStreamError !== "stream-transport") {
+      lastStreamError = "stream-transport";
+      setStatus("Robot stream disconnected. Reconnecting…", "danger-text");
+    }
 
     if (robotStream) {
       robotStream.close();

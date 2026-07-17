@@ -233,22 +233,27 @@ export function createTeachModule(options) {
 
     if (teachUiState === "recording") {
       stopTeachSampling();
+      let disableOk = true;
       try {
         const ok = await enableTeachMode(false);
         if (!ok) {
+          disableOk = false;
           setStatus("Failed to disable teach mode.", "danger-text");
         }
       } catch (error) {
+        disableOk = false;
         setStatus(error.message || "Failed to disable teach mode.", "danger-text");
       }
 
       teachUiState = teachSystem.count ? "ready" : "idle";
-      setStatus(
-        teachSystem.count
-          ? `Teach recording stopped. ${teachSystem.count} poses captured.`
-          : "Teach recording stopped.",
-        teachSystem.count ? "ok" : "warn"
-      );
+      if (disableOk) {
+        setStatus(
+          teachSystem.count
+            ? `Teach recording stopped. ${teachSystem.count} poses captured.`
+            : "Teach recording stopped.",
+          teachSystem.count ? "ok" : "warn"
+        );
+      }
       refreshTeachControls();
       return;
     }
@@ -259,8 +264,8 @@ export function createTeachModule(options) {
     } catch (error) {
       console.warn("Failed to send stop command:", error);
     }
+    // Final status comes from executeTrajectory / onTeachPlayClick ("…stopped").
     teachUiState = teachSystem.count ? "ready" : "idle";
-    setStatus("Teach playback stop requested.", "warn");
     refreshTeachControls();
   }
 

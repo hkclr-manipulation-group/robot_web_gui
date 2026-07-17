@@ -20,6 +20,7 @@ export class TaskSpaceUI {
     this.intervalMs = options.intervalMs ?? 500; // 连续调节的时间间隔（毫秒），默认500ms
     this.stepTrans = options.stepTrans ?? 0.01; // 平移每次步进的米数，默认0.01m
     this.stepRot = options.stepRot ?? 1; // 旋转每次步进的角度，默认1度
+    this.setStatus = typeof options.setStatus === "function" ? options.setStatus : null;
 
     this.uiMap = {}; // 缓存DOM
     this.currentPose = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
@@ -210,7 +211,10 @@ export class TaskSpaceUI {
       });
     }
 
-    setStatus(`已切换到${mode === 0 ? '增量位姿' : '绝对位姿'}模式`, "ok");
+    this.setStatus?.(
+      `Switched to ${mode === 0 ? "incremental" : "absolute"} pose mode.`,
+      "ok"
+    );
   }
 
   #createAxisCard(axis) {

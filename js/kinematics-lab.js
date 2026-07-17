@@ -704,7 +704,10 @@ export class KinematicsLab {
       `;
 
       this.#refreshDhInspect();
-      this.setStatus(allPass ? "DH validation passed." : "DH validation failed.", allPass ? "ok" : "warn");
+      this.setStatus(
+        allPass ? "DH validation passed." : "DH validation failed.",
+        allPass ? "ok" : "danger-text"
+      );
     } catch (error) {
       this.dhValidationSummaryEl.innerHTML = `<div class="lab-error">${error.message}</div>`;
       this.setStatus(error.message, "danger-text");
