@@ -514,8 +514,11 @@ body.is-pseudo-fullscreen .layout {
   right: 6px;
   background: #ffffff;
   border-radius: 24px;
-  padding: 24px;
-  min-width: 220px;
+  padding: 20px;
+  box-sizing: border-box;
+  /* Fixed desktop width; values sit close to axis labels. */
+  width: 228px;
+  min-width: 228px;
   z-index: 50;
   /* box-shadow: 0 10px 30px rgba(19,33,62,0.06), -6px -6px 12px rgba(255,255,255,0.6); */
 }
@@ -531,7 +534,7 @@ body.is-pseudo-fullscreen .layout {
 .ee-pose-content {
   background: #efefef; /* match joint-card background */
   border-radius: 12px;
-  padding: 20px 24px;
+  padding: 16px 18px;
   box-shadow: 0 6px 18px rgba(23, 23, 24, 0.06);
 }
 
@@ -550,9 +553,11 @@ body.is-pseudo-fullscreen .layout {
 
 .ee-pose-coordinate {
   display: grid;
-  grid-template-columns: 40px 1fr;
+  grid-template-columns: auto 9ch;
   align-items: center;
-  gap: 12px;
+  justify-content: start;
+  gap: 8px;
+  min-width: 0;
 }
 
 .ee-pose-axis {
@@ -568,6 +573,9 @@ body.is-pseudo-fullscreen .layout {
   font-weight: 800; /* Poppins ExtraBold */
   text-align: right;
   font-variant-numeric: tabular-nums;
+  /* Fixed slot so digit/sign changes do not resize the card. */
+  width: 9ch;
+  white-space: nowrap;
 }
 
 #viewer {
@@ -1263,12 +1271,18 @@ body.is-pseudo-fullscreen .layout {
   .ee-pose-card {
     top: 80px;
     right: 16px;
-    min-width: 200px;
-    padding: 20px 14px;
+    width: 210px;
+    min-width: 210px;
+    padding: 16px 14px;
   }
 
   .ee-pose-value {
     font-size: 16px;
+    width: 8ch;
+  }
+
+  .ee-pose-coordinate {
+    grid-template-columns: auto 8ch;
   }
 }
 
@@ -1277,6 +1291,7 @@ body.is-pseudo-fullscreen .layout {
   .ee-pose-card {
     top: 72px;
     right: 8px;
+    width: auto;
     min-width: 148px;
     max-width: 42vw;
     padding: 10px;
@@ -1294,6 +1309,9 @@ body.is-pseudo-fullscreen .layout {
 
   .ee-pose-value {
     font-size: 13px;
+    width: auto;
+    min-width: 0;
+    justify-self: stretch;
   }
 }
 
