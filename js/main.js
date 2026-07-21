@@ -42,6 +42,7 @@ import {
 import { createStreamEulerStabilizer, formatEePoseValue, formatPoseText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import { initFullscreen } from "./fullscreen.js";
+import { copyEnvInfoToClipboard } from "./env-info.js";
 import * as THREE from "three";
 
 /* ----------6---------------------------------------------------------------- */
@@ -1311,6 +1312,15 @@ function bindButtons() {
     } catch (error) {
       updateConnectionUi("danger");
       setStatus(error.message || "Ping failed.", "danger-text");
+    }
+  };
+
+  document.getElementById("copyEnvInfoBtn").onclick = async () => {
+    try {
+      await copyEnvInfoToClipboard();
+      setStatus("Environment info copied to clipboard.", "ok");
+    } catch (error) {
+      setStatus(error.message || "Copy env info failed.", "danger-text");
     }
   };
 

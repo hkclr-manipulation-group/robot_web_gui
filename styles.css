@@ -972,6 +972,7 @@ body.is-pseudo-fullscreen .layout {
 .task-actions { grid-template-columns: 1fr 1fr; margin-top: 10px; }
 .planner-grid { grid-template-columns: 1fr 1fr; margin-bottom: 10px; }
 .button-grid { grid-template-columns: 1fr 1fr; }
+.button-grid-span { grid-column: 1 / -1; }
 .path-preview {
   margin: 10px 0 0;
   padding: 10px;
