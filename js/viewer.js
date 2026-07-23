@@ -61,6 +61,7 @@ export class RobotViewer {
     // Cap DPR for mobile (iPhone/Android often 2.5–3) to keep WebGL stable; desktop unchanged when DPR ≤ 2
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.container.innerHTML = "";
     const canvas = this.renderer.domElement;
@@ -154,40 +155,31 @@ export class RobotViewer {
   /* ---------------- Lights ---------------- */
 
   _initLights() {
-
-    const hemi = new THREE.HemisphereLight(
-      0xffffff,
-      0x1c2c4b,
-      0.98
-    );
-
+    // 三点光：半球环境 + 主光投阴影 + 弱补光。避免多盏平行光在暗面叠出条纹。
+    const hemi = new THREE.HemisphereLight(0xf4f6fa, 0x6a7380, 0.80);
     this.scene.add(hemi);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.50);
     this.scene.add(ambient);
 
-    // 主光：承担阴影（四周辅光不投影，避免多重阴影）
-    const key = new THREE.DirectionalLight(0xffffff, 0.88);
-    key.position.set(3, -3, 4);
+    const key = new THREE.DirectionalLight(0xfff8f2, 0.95);
+    key.position.set(2.4, -1.8, 4.2);
     key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.bias = -0.00025;
+    key.shadow.normalBias = 0.02;
+    key.shadow.camera.near = 0.5;
+    key.shadow.camera.far = 16;
+    key.shadow.camera.left = -2.5;
+    key.shadow.camera.right = 2.5;
+    key.shadow.camera.top = 2.5;
+    key.shadow.camera.bottom = -2.5;
     this.scene.add(key);
 
-    // 围绕工作区的辅光（约 1 m 尺度），减少单侧死黑、突出轮廓
-    const surround = [
-      { pos: [ -3.2,  2.8,  3.6 ], color: 0xfff6f0, intensity: 0.4  },
-      { pos: [  3.6,  2.4,  3.0 ], color: 0xe8eefc, intensity: 0.34 },
-      { pos: [  0.6, -3.5,  3.2 ], color: 0xffffff, intensity: 0.3  },
-      { pos: [ -2.0, -2.8,  4.0 ], color: 0xf0f4ff, intensity: 0.26 },
-      { pos: [  0.0,  0.0,  5.5 ], color: 0xffffff, intensity: 0.22 },
-    ];
-
-    surround.forEach(({ pos, color, intensity }) => {
-      const d = new THREE.DirectionalLight(color, intensity);
-      d.position.set(pos[0], pos[1], pos[2]);
-      d.castShadow = false;
-      this.scene.add(d);
-    });
-
+    const fill = new THREE.DirectionalLight(0xe8eef8, 0.60);
+    fill.position.set(-2.6, 2.2, 2.8);
+    fill.castShadow = false;
+    this.scene.add(fill);
   }
 
   /* ---------------- Helpers ---------------- */

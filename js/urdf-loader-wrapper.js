@@ -26,10 +26,37 @@ function extractMtllibFiles(objSource) {
   return files;
 }
 
+/**
+ * CAD 导出的红漆薄片常法线朝内，FrontSide 会被剔掉。
+ * 仅对偏红材质开 DoubleSide，不影响钢体/灰色 OBJ。
+ */
+function isRedPaintMaterial(mat) {
+  if (!mat) return false;
+  const name = String(mat.name || "");
+  if (/red/i.test(name) || /226\s*,\s*23\s*,\s*23/.test(name)) return true;
+  const c = mat.color;
+  if (!c) return false;
+  // 高 R、低 G/B：红漆；排除灰/钢（接近等通道）
+  return c.r > 0.7 && c.g < 0.45 && c.b < 0.35 && c.r - Math.max(c.g, c.b) > 0.35;
+}
+
+function fixRedPaintStripeVisibility(object) {
+  object?.traverse?.((child) => {
+    if (!child?.isMesh || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach((mat) => {
+      if (!isRedPaintMaterial(mat)) return;
+      mat.side = THREE.DoubleSide;
+      mat.needsUpdate = true;
+    });
+  });
+}
+
 function tagObjMeshesPreserved(object) {
   object?.traverse?.((child) => {
     if (child.isMesh) child.userData[PRESERVE_OBJ_MATERIAL_KEY] = true;
   });
+  fixRedPaintStripeVisibility(object);
 }
 
 function meshShortName(path) {
@@ -410,8 +437,9 @@ export function applyGhostVisualStyle(robot) {
 function applyUrdfMeshesShadowMetal(robot) {
   robot?.traverse?.((obj) => {
     if (!obj?.isMesh) return;
+    // Cast onto ground only — self-receive causes shadow-acne stripes on link surfaces.
     obj.castShadow = true;
-    obj.receiveShadow = true;
+    obj.receiveShadow = false;
 
     if (obj.userData[PRESERVE_OBJ_MATERIAL_KEY]) return;
 
