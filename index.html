@@ -86,7 +86,7 @@
         </button>
       </div>
       
-      <!-- End Effector Pose + Gripper overlay cards -->
+      <!-- End Effector Pose (top-right) -->
       <div class="viewer-overlay-cards">
         <div class="ee-pose-card">
           <div class="ee-pose-title">End Effector Pose</div>
@@ -108,15 +108,18 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <div id="gripperCard" class="gripper-card" hidden>
-          <div class="gripper-title">Gripper</div>
-          <div class="gripper-content">
-            <div class="gripper-row">
-              <span class="gripper-axis">pos</span>
-              <span id="gripperValue" class="gripper-value">0.0000</span>
-            </div>
-            <input id="gripperSlider" class="gripper-slider" type="range" />
+      <!-- Gripper: bottom-left, above mode tabs for two-handed touch use -->
+      <div id="gripperCard" class="gripper-card" hidden>
+        <div class="gripper-title">Gripper</div>
+        <div class="gripper-content">
+          <div class="gripper-row">
+            <span class="gripper-axis">pos</span>
+            <span id="gripperValue" class="gripper-value">0.0000</span>
+          </div>
+          <div class="gripper-slider-wrap slider-wrap">
+            <input id="gripperSlider" class="gripper-slider slider-large" type="range" />
           </div>
         </div>
       </div>
