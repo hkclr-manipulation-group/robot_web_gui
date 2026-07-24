@@ -774,7 +774,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     document.getElementById("planCartesianBtn").click();
   },
 }, {
-  intervalMs: 1000,     // 连续调节的时间间隔（毫秒），可根据需要调整
+  intervalMs: 100,     // 连续调节的时间间隔（毫秒），可根据需要调整
   stepTrans: 0.01,     // 平移每次步进的米数，可根据需要调整
   stepRot: 1,          // 旋转每次步进的角度，可根据需要调整
   controlMode: 0,      // 默认控制模式：1=绝对位姿, 0=增量位姿
