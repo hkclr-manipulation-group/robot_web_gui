@@ -108,3 +108,7 @@ export async function sendHomeCommand(jointNames, jointValues, interpolation = {
 export async function sendZeroCommand(jointNames, jointValues) {
   return post('/zero', { joint_names: jointNames, joint_values: jointValues });
 }
+
+export async function sendGripperCommand(pos, v = 50, t = 0) {
+  return post('/move_gripper', { gripper_pos: pos, v, t });
+}

@@ -1,5 +1,6 @@
 import {
   DEFAULT_ROBOTS,
+  GRIPPER,
   PATH_DEFAULTS,
   RT_INTERPOLATION,
   STORAGE_KEYS,
@@ -16,6 +17,7 @@ import {
   isHardwareControlActive,
   isGatewayActive,
   pingGateway,
+  sendGripperCommand,
   sendHomeCommand,
   sendJointCommand,
   sendPoseCommand,
@@ -69,6 +71,9 @@ const teachPlayBtnEl = document.getElementById("teachPlayBtn");
 const teachStopBtnEl = document.getElementById("teachStopBtn");
 
 const eePoseEl = document.getElementById("eePose");
+const gripperCardEl = document.getElementById("gripperCard");
+const gripperSliderEl = document.getElementById("gripperSlider");
+const gripperValueEl = document.getElementById("gripperValue");
 const baseLinkEl = document.getElementById("baseLink");
 const tipLinkEl = document.getElementById("tipLink");
 
@@ -97,6 +102,11 @@ let kinematics = null;
 let isBusy = false;
 let isSyncing = false; // 防止 UI/FK/IK 相互触发造成循环
 let ikBusy = false;    // 防止拖动时重复进入 IK
+let gripperInteracting = false;
+let gripperSendTimer = null;
+let gripperBound = false;
+/** Runtime slider limits from loaded URDF `gripper_J1` (fallback: GRIPPER.min/max). */
+let gripperLimits = { min: GRIPPER.min, max: GRIPPER.max };
 
 let lastGoalMap = null;
 let lastGoalPose = null;
@@ -1067,6 +1077,7 @@ async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
   setActiveRobot(robot.name);
   robotSelectEl.value = robot.name;
   localStorage.setItem(STORAGE_KEYS.robotId, robot.name);
+  syncGripperCardForRobot(robot.name);
 
   if (activeRobotPath === path && robotGhost && robotHardware) {
     if (announce) setStatus(`Active robot: ${robot.name}.`, "ok");
@@ -1079,6 +1090,10 @@ async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
   }
 
   if (loaded) {
+    syncGripperCardForRobot(robot.name, robotGhost);
+    if (robot.hasGripper) {
+      applyGripperToUrdf(Number(gripperSliderEl?.value ?? GRIPPER.default));
+    }
     preloadBackgroundRobots(robot.name);
     // Always clear the in-progress "Loading…" line; announce only affects wording.
     setStatus(
@@ -1512,6 +1527,10 @@ function connectStream(url) {
         }
         refreshGhostVersusTelemetry(jointPosition);
       }
+
+      if (data.gripper_pos !== undefined && data.gripper_pos !== null) {
+        syncGripperFromStream(data.gripper_pos);
+      }
     } catch (error) {
       console.error("Failed to parse stream payload:", error, event.data);
     }
@@ -1550,6 +1569,161 @@ function updateEePoseCard(position) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Gripper card                                                                */
+/* -------------------------------------------------------------------------- */
+
+function formatGripperValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0.0000";
+  return n.toFixed(4);
+}
+
+function getGripperLimitsFromUrdf(urdfRobot) {
+  const joint = urdfRobot?.joints?.[GRIPPER.jointName];
+  const lower = Number(joint?.limit?.lower);
+  const upper = Number(joint?.limit?.upper);
+  if (Number.isFinite(lower) && Number.isFinite(upper) && lower < upper) {
+    return { min: lower, max: upper };
+  }
+  return { min: GRIPPER.min, max: GRIPPER.max };
+}
+
+function applyGripperLimitsToSlider() {
+  if (!gripperSliderEl) return;
+  gripperSliderEl.min = String(gripperLimits.min);
+  gripperSliderEl.max = String(gripperLimits.max);
+  gripperSliderEl.step = String(GRIPPER.step);
+}
+
+function clampGripperValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return GRIPPER.default;
+  return Math.min(gripperLimits.max, Math.max(gripperLimits.min, n));
+}
+
+function applyGripperToUrdf(value) {
+  const pos = clampGripperValue(value);
+  for (const urdfRobot of [robotGhost, robotHardware]) {
+    const joint = urdfRobot?.joints?.[GRIPPER.jointName];
+    if (!joint) continue;
+    if (typeof joint.setJointValue === "function") joint.setJointValue(pos);
+    else joint.angle = pos;
+    urdfRobot.updateMatrixWorld?.(true);
+  }
+  return pos;
+}
+
+function updateGripperUi(value, { updateSlider = true } = {}) {
+  const pos = clampGripperValue(value);
+  if (gripperValueEl) gripperValueEl.textContent = formatGripperValue(pos);
+  if (updateSlider && gripperSliderEl && !gripperInteracting) {
+    gripperSliderEl.value = String(pos);
+  }
+  return pos;
+}
+
+function setGripperCardVisible(visible) {
+  if (!gripperCardEl) return;
+  gripperCardEl.hidden = !visible;
+  if (visible && gripperSliderEl) {
+    applyGripperLimitsToSlider();
+    const current = Number(gripperSliderEl.value);
+    updateGripperUi(Number.isFinite(current) ? current : GRIPPER.default);
+  }
+}
+
+function syncGripperCardForRobot(robotName, urdfRobot = robotGhost) {
+  const robot = findRobotByName(robotName);
+  if (robot.hasGripper && urdfRobot) {
+    gripperLimits = getGripperLimitsFromUrdf(urdfRobot);
+  } else {
+    gripperLimits = { min: GRIPPER.min, max: GRIPPER.max };
+  }
+  setGripperCardVisible(!!robot.hasGripper);
+}
+
+async function sendGripperPos(pos) {
+  if (isLocalPreviewOnly()) {
+    applyGripperToUrdf(pos);
+    updateGripperUi(pos);
+    setStatus("Local preview: gripper move applied (no gateway).", "warn");
+    return;
+  }
+
+  try {
+    const result = await sendGripperCommand(pos, GRIPPER.speed, GRIPPER.accTime);
+    if (result.mode === "preview") {
+      applyGripperToUrdf(pos);
+      updateGripperUi(pos);
+      setStatus("Preview gripper move applied locally.", "warn");
+      return;
+    }
+    if (result.data && result.data.success === false) {
+      setStatus(`Failed to move gripper: ${result.data.message}`, "danger-text");
+      return;
+    }
+    applyGripperToUrdf(pos);
+    updateGripperUi(pos, { updateSlider: false });
+    if (!isHardwareControlActive()) {
+      setStatus("Simulation: gripper command sent to rt_control.", "ok");
+    }
+  } catch (error) {
+    console.error("[gripper] Error sending command:", error);
+    setStatus(`Error moving gripper: ${error.message}`, "danger-text");
+  }
+}
+
+function scheduleGripperSend(pos) {
+  if (gripperSendTimer) clearTimeout(gripperSendTimer);
+  gripperSendTimer = setTimeout(() => {
+    gripperSendTimer = null;
+    sendGripperPos(pos);
+  }, 80);
+}
+
+function bindGripperControls() {
+  if (gripperBound || !gripperSliderEl) return;
+  gripperBound = true;
+
+  applyGripperLimitsToSlider();
+  gripperSliderEl.value = String(GRIPPER.default);
+  updateGripperUi(GRIPPER.default);
+
+  const onStart = () => {
+    gripperInteracting = true;
+  };
+  const onEnd = () => {
+    gripperInteracting = false;
+    const pos = clampGripperValue(gripperSliderEl.value);
+    applyGripperToUrdf(pos);
+    updateGripperUi(pos, { updateSlider: false });
+    if (gripperSendTimer) {
+      clearTimeout(gripperSendTimer);
+      gripperSendTimer = null;
+    }
+    sendGripperPos(pos);
+  };
+
+  gripperSliderEl.addEventListener("pointerdown", onStart);
+  gripperSliderEl.addEventListener("pointerup", onEnd);
+  gripperSliderEl.addEventListener("pointercancel", onEnd);
+  gripperSliderEl.addEventListener("input", () => {
+    const pos = clampGripperValue(gripperSliderEl.value);
+    applyGripperToUrdf(pos);
+    updateGripperUi(pos, { updateSlider: false });
+    scheduleGripperSend(pos);
+  });
+}
+
+function syncGripperFromStream(gripperPos) {
+  if (gripperCardEl?.hidden || gripperInteracting) return;
+  if (!Number.isFinite(Number(gripperPos))) return;
+  const pos = clampGripperValue(gripperPos);
+  applyGripperToUrdf(pos);
+  updateGripperUi(pos);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Boot                                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -1572,6 +1746,7 @@ function updateEePoseCard(position) {
 
   bindButtons();
   bindCardTabs();
+  bindGripperControls();
   teach.refreshTeachControls();
 
   connectStream(savedGateway);

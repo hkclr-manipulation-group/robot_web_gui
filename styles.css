@@ -507,20 +507,88 @@ body.is-pseudo-fullscreen .layout {
   letter-spacing: 0.3px;
 }
 
-/* End Effector Pose Card - Floating on viewer */
-.ee-pose-card {
+/* Viewer overlay cards (EE Pose + optional Gripper) */
+.viewer-overlay-cards {
   position: absolute;
   top: 90px;
   right: 6px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 228px;
+  min-width: 228px;
+  box-sizing: border-box;
+}
+
+/* End Effector Pose Card - Floating on viewer */
+.ee-pose-card {
   background: #ffffff;
   border-radius: 24px;
   padding: 20px;
   box-sizing: border-box;
-  /* Fixed desktop width; values sit close to axis labels. */
-  width: 228px;
-  min-width: 228px;
-  z-index: 50;
+  width: 100%;
   /* box-shadow: 0 10px 30px rgba(19,33,62,0.06), -6px -6px 12px rgba(255,255,255,0.6); */
+}
+
+.gripper-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.gripper-card[hidden] {
+  display: none !important;
+}
+
+.gripper-title {
+  font-size: 13.53px;
+  font-weight: 800;
+  color: #505050;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.gripper-content {
+  background: #efefef;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 18px rgba(23, 23, 24, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gripper-row {
+  display: grid;
+  grid-template-columns: auto 9ch;
+  align-items: center;
+  justify-content: start;
+  gap: 8px;
+}
+
+.gripper-axis {
+  font-size: 13.53px;
+  color: #A0A0A0;
+  font-weight: 600;
+}
+
+.gripper-value {
+  font-size: 18px;
+  color: #111111;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 9ch;
+  white-space: nowrap;
+}
+
+.gripper-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: #505050;
 }
 
 .ee-pose-title {
@@ -1269,12 +1337,19 @@ body.is-pseudo-fullscreen .layout {
     overflow: hidden;
   }
 
-  .ee-pose-card {
+  .viewer-overlay-cards {
     top: 80px;
     right: 16px;
     width: 210px;
     min-width: 210px;
+  }
+
+  .ee-pose-card {
     padding: 16px 14px;
+  }
+
+  .gripper-card {
+    padding: 12px 14px;
   }
 
   .ee-pose-value {
@@ -1289,30 +1364,43 @@ body.is-pseudo-fullscreen .layout {
 
 /* Further adjust EE Pose Card for mobile (restored from last commit). */
 @media (max-width: 820px) {
-  .ee-pose-card {
+  .viewer-overlay-cards {
     top: 72px;
     right: 8px;
     width: auto;
     min-width: 148px;
     max-width: 42vw;
+    gap: 8px;
+  }
+
+  .ee-pose-card,
+  .gripper-card {
     padding: 10px;
     border-radius: 14px;
   }
 
-  .ee-pose-content {
+  .ee-pose-content,
+  .gripper-content {
     padding: 10px 12px;
   }
 
-  .ee-pose-coordinate {
+  .ee-pose-coordinate,
+  .gripper-row {
     grid-template-columns: 20px minmax(0, 1fr);
     gap: 6px;
   }
-
-  .ee-pose-value {
+  
+  .ee-pose-value,
+  .gripper-value {
     font-size: 13px;
     width: auto;
     min-width: 0;
     justify-self: stretch;
+  }
+
+  .gripper-title {
+    font-size: 11px;
+    margin-bottom: 8px;
   }
 }
 
@@ -1534,21 +1622,28 @@ body.is-pseudo-fullscreen .layout {
 
 /* Phone EE Pose Card compact sizing (same as last commit at max-width: 820px). */
 @media (max-width: 820px) {
-  .ee-pose-card {
+  .viewer-overlay-cards {
     top: 52px;
     right: 6px;
     min-width: 118px;
     max-width: 34vw;
+    gap: 6px;
+  }
+
+  .ee-pose-card,
+  .gripper-card {
     padding: 7px;
     border-radius: 10px;
   }
 
-  .ee-pose-title {
+  .ee-pose-title,
+  .gripper-title {
     font-size: 10px;
     margin-bottom: 6px;
   }
 
-  .ee-pose-content {
+  .ee-pose-content,
+  .gripper-content {
     padding: 7px 8px;
     border-radius: 8px;
   }
@@ -1558,7 +1653,8 @@ body.is-pseudo-fullscreen .layout {
   }
 
   .ee-pose-label,
-  .ee-pose-axis {
+  .ee-pose-axis,
+  .gripper-axis {
     font-size: 10px;
   }
 
@@ -1678,7 +1774,7 @@ body.is-pseudo-fullscreen .layout {
     max-width: calc(100% - 92px);
   }
 
-  .ee-pose-card {
+  .viewer-overlay-cards {
     max-width: 128px;
   }
 }
@@ -1790,30 +1886,39 @@ body.is-pseudo-fullscreen .layout {
     width: 24px;
   }
 
-  .ee-pose-card {
+  .viewer-overlay-cards {
     top: 48px;
     right: 6px;
     min-width: 112px;
     max-width: 126px;
+  }
+
+  .ee-pose-card,
+  .gripper-card {
     padding: 7px;
     border-radius: 10px;
   }
 
   .ee-pose-title,
   .ee-pose-label,
-  .ee-pose-axis {
+  .ee-pose-axis,
+  .gripper-title,
+  .gripper-axis {
     font-size: 10px;
   }
 
-  .ee-pose-title {
+  .ee-pose-title,
+  .gripper-title {
     margin-bottom: 6px;
   }
 
-  .ee-pose-content {
+  .ee-pose-content,
+  .gripper-content {
     padding: 7px 8px;
   }
 
-  .ee-pose-value {
+  .ee-pose-value,
+  .gripper-value {
     font-size: 11px;
   }
 }

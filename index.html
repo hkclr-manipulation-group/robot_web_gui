@@ -86,24 +86,37 @@
         </button>
       </div>
       
-      <!-- End Effector Pose Card -->
-      <div class="ee-pose-card">
-        <div class="ee-pose-title">End Effector Pose</div>
-        <div class="ee-pose-content">
-          <div class="ee-pose-section">
-            <div class="ee-pose-label">Trans</div>
-            <div class="ee-pose-coordinate">
-              <span class="ee-pose-axis">x</span>
-              <span id="eePoseX" class="ee-pose-value">0.1594</span>
+      <!-- End Effector Pose + Gripper overlay cards -->
+      <div class="viewer-overlay-cards">
+        <div class="ee-pose-card">
+          <div class="ee-pose-title">End Effector Pose</div>
+          <div class="ee-pose-content">
+            <div class="ee-pose-section">
+              <div class="ee-pose-label">Trans</div>
+              <div class="ee-pose-coordinate">
+                <span class="ee-pose-axis">x</span>
+                <span id="eePoseX" class="ee-pose-value">0.1594</span>
+              </div>
+              <div class="ee-pose-coordinate">
+                <span class="ee-pose-axis">y</span>
+                <span id="eePoseY" class="ee-pose-value">0.958</span>
+              </div>
+              <div class="ee-pose-coordinate">
+                <span class="ee-pose-axis">z</span>
+                <span id="eePoseZ" class="ee-pose-value">1.3445</span>
+              </div>
             </div>
-            <div class="ee-pose-coordinate">
-              <span class="ee-pose-axis">y</span>
-              <span id="eePoseY" class="ee-pose-value">0.958</span>
+          </div>
+        </div>
+
+        <div id="gripperCard" class="gripper-card" hidden>
+          <div class="gripper-title">Gripper</div>
+          <div class="gripper-content">
+            <div class="gripper-row">
+              <span class="gripper-axis">pos</span>
+              <span id="gripperValue" class="gripper-value">0.0000</span>
             </div>
-            <div class="ee-pose-coordinate">
-              <span class="ee-pose-axis">z</span>
-              <span id="eePoseZ" class="ee-pose-value">1.3445</span>
-            </div>
+            <input id="gripperSlider" class="gripper-slider" type="range" />
           </div>
         </div>
       </div>

@@ -1,9 +1,24 @@
 export const DEFAULT_ROBOTS = [
   { id: 'spark2', name: 'spark2_v2_2', mode: 'wifi', dof: 6 },
-  { id: 'spark2', name: 'spark2_v2_2_with_gripper', mode: 'wifi', dof: 6 },
+  { id: 'spark2', name: 'spark2_v2_2_with_gripper', mode: 'wifi', dof: 6, hasGripper: true },
   { id: 'spark2', name: 'spark2_v2', mode: 'wifi', dof: 6 },
   { id: 'spark2', name: 'spark2_v1', mode: 'wifi', dof: 6 },
 ];
+
+/**
+ * Gripper control defaults.
+ * `min`/`max` are fallbacks only — runtime slider limits come from the loaded
+ * URDF joint `gripper_J1` (`limit.lower` / `limit.upper`).
+ */
+export const GRIPPER = {
+  jointName: 'gripper_J1',
+  min: -0.03,
+  max: 0.01,
+  step: 0.0005,
+  default: 0,
+  speed: 50,
+  accTime: 0,
+};
 
 /** URDF path derived from robot `name` (folder under `./urdf/`). */
 export function getUrdfPathForRobot(robot) {

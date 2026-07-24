@@ -6,7 +6,11 @@ function getChain(robot) {
   const jointsDict = robot.joints || {};
   const movable = Object.keys(jointsDict)
     .filter((name) => {
-      const type = jointsDict[name]?.jointType;
+      // Gripper DOF is controlled separately via /move_gripper — keep arm chain 6-DOF.
+      if (/^gripper_/i.test(name)) return false;
+      const joint = jointsDict[name];
+      if (joint?.mimicJoint || joint?.mimic) return false;
+      const type = joint?.jointType;
       return type === 'revolute' || type === 'continuous' || type === 'prismatic';
     })
     .map((name) => ({ name, joint: jointsDict[name] }));

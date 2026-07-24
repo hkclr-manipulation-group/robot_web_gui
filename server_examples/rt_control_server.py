@@ -18,6 +18,7 @@ sys.path.insert(0, spark2_sdk_path)
 
 from spark2_sdk import (
     Spark2,
+    JointState1f,
     JointState6b,
     JointState6f,
     Pose,
@@ -313,6 +314,15 @@ def _joint_pos_stream_values(robot_instance):
     return [_deg_list_to_rad(joint_pos_deg)]
 
 
+def _gripper_pos_stream_value(robot_instance):
+    try:
+        gripper = robot_instance.get_pos().gripper
+        values = gripper.to_list() if gripper is not None else []
+        return float(values[0]) if values else None
+    except Exception:
+        return None
+
+
 def _read_stream_state():
     global last_stream_error, last_stream_error_log
 
@@ -321,6 +331,7 @@ def _read_stream_state():
             "connected": False,
                 "ee_pose": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
             "joint_pos": [[0.0] * 6],
+            "gripper_pos": None,
             "hardware_connected": False,
             "error": last_stream_error or "Waiting for rt_control (start cuarm_rt_control first).",
         }
@@ -328,12 +339,14 @@ def _read_stream_state():
     try:
         ee_pose = _ee_pose_stream_values(robot)
         joint_pos = _joint_pos_stream_values(robot)
+        gripper_pos = _gripper_pos_stream_value(robot)
         last_stream_error = ""
         return {
             "connected": True,
             "hardware_connected": robot_hardware_connected,
             "ee_pose": ee_pose,
             "joint_pos": joint_pos,
+            "gripper_pos": gripper_pos,
             "error": "",
         }
     except Exception as exc:
@@ -346,6 +359,7 @@ def _read_stream_state():
             "connected": False,
                 "ee_pose": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
             "joint_pos": [[0.0] * 6],
+            "gripper_pos": None,
             "hardware_connected": robot_hardware_connected,
             "error": last_stream_error,
         }
@@ -494,6 +508,42 @@ def move_pose_incremental(robot_id, payload):
     return execute_robot_action(robot_id, action)
 
 
+def move_gripper(robot_id, payload):
+    global teach_active
+
+    if teach_active:
+        return False, "Disable teach mode first."
+
+    gripper_pos = payload.get("gripper_pos")
+    if gripper_pos is None:
+        return False, "No gripper_pos received"
+    if isinstance(gripper_pos, (list, tuple)):
+        if len(gripper_pos) == 0:
+            return False, "No gripper_pos received"
+        gripper_pos = gripper_pos[0]
+
+    try:
+        gripper_pos = float(gripper_pos)
+    except (TypeError, ValueError):
+        return False, "Invalid gripper_pos"
+
+    try:
+        speed = int(payload.get("v", payload.get("speed", 50)))
+    except (TypeError, ValueError):
+        speed = 50
+    try:
+        acc_time = float(payload.get("t", 0.0))
+    except (TypeError, ValueError):
+        acc_time = 0.0
+
+    def action():
+        robot_instance = _get_robot()
+        robot_instance.move_gripper_pos(JointState1f(gripper_pos), speed, acc_time)
+        print(f"[move_gripper] pos={gripper_pos}, t={acc_time}, v={speed}")
+
+    return execute_robot_action(robot_id, action)
+
+
 def enable_teach(robot_id, payload):
     global teach_active
 
@@ -600,6 +650,12 @@ class Handler(BaseHTTPRequestHandler):
                 {"path": self.path, **data},
                 move_pose_incremental,
             )
+        elif self.path == "/move_gripper":
+            result = post_request(
+                robot_id,
+                {"path": self.path, **data},
+                move_gripper,
+            )
         elif self.path == "/teach":
             result = post_request(
                 robot_id,
@@ -620,6 +676,7 @@ class Handler(BaseHTTPRequestHandler):
             "/zero",
             "/move_pose",
             "/move_pose_incremental",
+            "/move_gripper",
             "/teach",
         ):
             status = 400
