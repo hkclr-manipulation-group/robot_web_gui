@@ -569,7 +569,7 @@ body.is-pseudo-fullscreen .layout {
 
 .gripper-row {
   display: grid;
-  grid-template-columns: auto 9ch;
+  grid-template-columns: minmax(0, 1fr) 5ch;
   align-items: center;
   justify-content: start;
   gap: 8px;
@@ -587,7 +587,7 @@ body.is-pseudo-fullscreen .layout {
   font-weight: 800;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  width: 9ch;
+  width: 5ch;
   white-space: nowrap;
 }
 
@@ -1439,18 +1439,26 @@ body.is-pseudo-fullscreen .layout {
     padding: 10px 12px;
   }
 
-  .ee-pose-coordinate,
-  .gripper-row {
+  .ee-pose-coordinate {
     grid-template-columns: 20px minmax(0, 1fr);
     gap: 6px;
   }
+
+  .gripper-row {
+    grid-template-columns: minmax(0, 1fr) 4.5ch;
+    gap: 6px;
+  }
   
-  .ee-pose-value,
-  .gripper-value {
+  .ee-pose-value {
     font-size: 13px;
     width: auto;
     min-width: 0;
     justify-self: stretch;
+  }
+
+  .gripper-value {
+    font-size: 13px;
+    width: 4.5ch;
   }
 
   .gripper-title {

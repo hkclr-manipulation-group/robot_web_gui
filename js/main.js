@@ -1092,7 +1092,7 @@ async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
   if (loaded) {
     syncGripperCardForRobot(robot.name, robotGhost);
     if (robot.hasGripper) {
-      applyGripperToUrdf(Number(gripperSliderEl?.value ?? GRIPPER.default));
+      applyGripperUiToUrdf(Number(gripperSliderEl?.value ?? GRIPPER.default));
     }
     preloadBackgroundRobots(robot.name);
     // Always clear the in-progress "Loading…" line; announce only affects wording.
@@ -1570,12 +1570,13 @@ function updateEePoseCard(position) {
 
 /* -------------------------------------------------------------------------- */
 /* Gripper card                                                                */
+/* UI 0 = open (joint upper), UI 1 = close (joint lower); SDK/URDF use meters. */
 /* -------------------------------------------------------------------------- */
 
-function formatGripperValue(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "0.0000";
-  return n.toFixed(4);
+function formatGripperUiValue(ui) {
+  const n = Number(ui);
+  if (!Number.isFinite(n)) return "0.00";
+  return n.toFixed(2);
 }
 
 function getGripperLimitsFromUrdf(urdfRobot) {
@@ -1588,21 +1589,51 @@ function getGripperLimitsFromUrdf(urdfRobot) {
   return { min: GRIPPER.min, max: GRIPPER.max };
 }
 
-function applyGripperLimitsToSlider() {
-  if (!gripperSliderEl) return;
-  gripperSliderEl.min = String(gripperLimits.min);
-  gripperSliderEl.max = String(gripperLimits.max);
-  gripperSliderEl.step = String(GRIPPER.step);
+/** Open / close joint positions from current URDF (or fallback) limits. */
+function getGripperOpenCloseJoint() {
+  return {
+    open: gripperLimits.max,
+    close: gripperLimits.min,
+  };
 }
 
-function clampGripperValue(value) {
-  const n = Number(value);
+function clampGripperUi(ui) {
+  const n = Number(ui);
   if (!Number.isFinite(n)) return GRIPPER.default;
+  return Math.min(GRIPPER.uiMax, Math.max(GRIPPER.uiMin, n));
+}
+
+function clampGripperJoint(pos) {
+  const n = Number(pos);
+  if (!Number.isFinite(n)) return gripperLimits.max;
   return Math.min(gripperLimits.max, Math.max(gripperLimits.min, n));
 }
 
-function applyGripperToUrdf(value) {
-  const pos = clampGripperValue(value);
+/** Map UI [0,1] → joint meters (0=open/upper, 1=close/lower). */
+function gripperUiToJoint(ui) {
+  const u = clampGripperUi(ui);
+  const { open, close } = getGripperOpenCloseJoint();
+  return open + u * (close - open);
+}
+
+/** Map joint meters → UI [0,1]. */
+function gripperJointToUi(pos) {
+  const p = clampGripperJoint(pos);
+  const { open, close } = getGripperOpenCloseJoint();
+  const span = close - open;
+  if (!Number.isFinite(span) || Math.abs(span) < 1e-12) return GRIPPER.default;
+  return clampGripperUi((p - open) / span);
+}
+
+function applyGripperLimitsToSlider() {
+  if (!gripperSliderEl) return;
+  gripperSliderEl.min = String(GRIPPER.uiMin);
+  gripperSliderEl.max = String(GRIPPER.uiMax);
+  gripperSliderEl.step = String(GRIPPER.step);
+}
+
+function applyGripperJointToUrdf(jointPos) {
+  const pos = clampGripperJoint(jointPos);
   for (const urdfRobot of [robotGhost, robotHardware]) {
     const joint = urdfRobot?.joints?.[GRIPPER.jointName];
     if (!joint) continue;
@@ -1613,13 +1644,17 @@ function applyGripperToUrdf(value) {
   return pos;
 }
 
-function updateGripperUi(value, { updateSlider = true } = {}) {
-  const pos = clampGripperValue(value);
-  if (gripperValueEl) gripperValueEl.textContent = formatGripperValue(pos);
+function applyGripperUiToUrdf(ui) {
+  return applyGripperJointToUrdf(gripperUiToJoint(ui));
+}
+
+function updateGripperUi(ui, { updateSlider = true } = {}) {
+  const u = clampGripperUi(ui);
+  if (gripperValueEl) gripperValueEl.textContent = formatGripperUiValue(u);
   if (updateSlider && gripperSliderEl && !gripperInteracting) {
-    gripperSliderEl.value = String(pos);
+    gripperSliderEl.value = String(u);
   }
-  return pos;
+  return u;
 }
 
 function setGripperCardVisible(visible) {
@@ -1628,7 +1663,9 @@ function setGripperCardVisible(visible) {
   if (visible && gripperSliderEl) {
     applyGripperLimitsToSlider();
     const current = Number(gripperSliderEl.value);
-    updateGripperUi(Number.isFinite(current) ? current : GRIPPER.default);
+    const ui = Number.isFinite(current) ? current : GRIPPER.default;
+    updateGripperUi(ui);
+    applyGripperUiToUrdf(ui);
   }
 }
 
@@ -1642,19 +1679,22 @@ function syncGripperCardForRobot(robotName, urdfRobot = robotGhost) {
   setGripperCardVisible(!!robot.hasGripper);
 }
 
-async function sendGripperPos(pos) {
+async function sendGripperUi(ui) {
+  const u = clampGripperUi(ui);
+  const jointPos = gripperUiToJoint(u);
+
   if (isLocalPreviewOnly()) {
-    applyGripperToUrdf(pos);
-    updateGripperUi(pos);
+    applyGripperJointToUrdf(jointPos);
+    updateGripperUi(u);
     setStatus("Local preview: gripper move applied (no gateway).", "warn");
     return;
   }
 
   try {
-    const result = await sendGripperCommand(pos, GRIPPER.speed, GRIPPER.accTime);
+    const result = await sendGripperCommand(jointPos, GRIPPER.speed, GRIPPER.accTime);
     if (result.mode === "preview") {
-      applyGripperToUrdf(pos);
-      updateGripperUi(pos);
+      applyGripperJointToUrdf(jointPos);
+      updateGripperUi(u);
       setStatus("Preview gripper move applied locally.", "warn");
       return;
     }
@@ -1662,8 +1702,8 @@ async function sendGripperPos(pos) {
       setStatus(`Failed to move gripper: ${result.data.message}`, "danger-text");
       return;
     }
-    applyGripperToUrdf(pos);
-    updateGripperUi(pos, { updateSlider: false });
+    applyGripperJointToUrdf(jointPos);
+    updateGripperUi(u, { updateSlider: false });
     if (!isHardwareControlActive()) {
       setStatus("Simulation: gripper command sent to rt_control.", "ok");
     }
@@ -1673,11 +1713,11 @@ async function sendGripperPos(pos) {
   }
 }
 
-function scheduleGripperSend(pos) {
+function scheduleGripperSend(ui) {
   if (gripperSendTimer) clearTimeout(gripperSendTimer);
   gripperSendTimer = setTimeout(() => {
     gripperSendTimer = null;
-    sendGripperPos(pos);
+    sendGripperUi(ui);
   }, 80);
 }
 
@@ -1688,39 +1728,41 @@ function bindGripperControls() {
   applyGripperLimitsToSlider();
   gripperSliderEl.value = String(GRIPPER.default);
   updateGripperUi(GRIPPER.default);
+  applyGripperUiToUrdf(GRIPPER.default);
 
   const onStart = () => {
     gripperInteracting = true;
   };
   const onEnd = () => {
     gripperInteracting = false;
-    const pos = clampGripperValue(gripperSliderEl.value);
-    applyGripperToUrdf(pos);
-    updateGripperUi(pos, { updateSlider: false });
+    const ui = clampGripperUi(gripperSliderEl.value);
+    applyGripperUiToUrdf(ui);
+    updateGripperUi(ui, { updateSlider: false });
     if (gripperSendTimer) {
       clearTimeout(gripperSendTimer);
       gripperSendTimer = null;
     }
-    sendGripperPos(pos);
+    sendGripperUi(ui);
   };
 
   gripperSliderEl.addEventListener("pointerdown", onStart);
   gripperSliderEl.addEventListener("pointerup", onEnd);
   gripperSliderEl.addEventListener("pointercancel", onEnd);
   gripperSliderEl.addEventListener("input", () => {
-    const pos = clampGripperValue(gripperSliderEl.value);
-    applyGripperToUrdf(pos);
-    updateGripperUi(pos, { updateSlider: false });
-    scheduleGripperSend(pos);
+    const ui = clampGripperUi(gripperSliderEl.value);
+    applyGripperUiToUrdf(ui);
+    updateGripperUi(ui, { updateSlider: false });
+    scheduleGripperSend(ui);
   });
 }
 
 function syncGripperFromStream(gripperPos) {
   if (gripperCardEl?.hidden || gripperInteracting) return;
   if (!Number.isFinite(Number(gripperPos))) return;
-  const pos = clampGripperValue(gripperPos);
-  applyGripperToUrdf(pos);
-  updateGripperUi(pos);
+  const jointPos = clampGripperJoint(gripperPos);
+  const ui = gripperJointToUi(jointPos);
+  applyGripperJointToUrdf(jointPos);
+  updateGripperUi(ui);
 }
 
 /* -------------------------------------------------------------------------- */
