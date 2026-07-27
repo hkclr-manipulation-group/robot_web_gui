@@ -211,13 +211,35 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
   track?.onMeshChange?.();
   console.log(`[URDF][mesh] start ${short}`);
 
+  /**
+   * Keep LoadingManager item open until done() attaches geometry.
+   * Ending the item on fetch alone races: onLoad can fire, then clone/mount
+   * an incomplete robot before MTL/parse/done — classic cold-cache first visit.
+   */
+  const managerUrl = manager.resolveURL(path);
+  let managerItemOpen = false;
+  const beginManagerItem = () => {
+    if (managerItemOpen) return;
+    managerItemOpen = true;
+    manager.itemStart(managerUrl);
+  };
+  const endManagerItem = (failed = false) => {
+    if (!managerItemOpen) return;
+    managerItemOpen = false;
+    if (failed) manager.itemError(managerUrl);
+    manager.itemEnd(managerUrl);
+  };
+
   const finishMesh = (object, err) => {
-    track?.inFlight?.delete(path);
-    track?.onMeshChange?.();
     const ms = (performance.now() - t0).toFixed(1);
+    // Order is critical: done() must attach geometry BEFORE clearing inFlight /
+    // itemEnd, otherwise tryResolveReady/onLoad can clone an incomplete robot.
     if (err) {
       console.warn(`[URDF][mesh] FAIL ${short} ${ms}ms`, err);
       done(null, err);
+      track?.inFlight?.delete(path);
+      track?.onMeshChange?.();
+      endManagerItem(true);
       return;
     }
     let tris = 0;
@@ -232,23 +254,9 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
         (tris ? ` ~${Math.round(tris)} tris` : ""),
     );
     done(object);
-  };
-
-  /** Manual LoadingManager bookkeeping (we use fetch, not FileLoader). */
-  const withManagerItem = (url, promise) => {
-    const resolved = manager.resolveURL(url);
-    manager.itemStart(resolved);
-    return promise.then(
-      (value) => {
-        manager.itemEnd(resolved);
-        return value;
-      },
-      (err) => {
-        manager.itemError(resolved);
-        manager.itemEnd(resolved);
-        throw err;
-      },
-    );
+    track?.inFlight?.delete(path);
+    track?.onMeshChange?.();
+    endManagerItem(false);
   };
 
   if (/\.obj$/i.test(path)) {
@@ -257,13 +265,11 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
       toCdnMeshUrl(path)?.replace(/[^/]+$/, "") ||
       THREE.LoaderUtils.extractUrlBase(absolutePageUrl(path));
 
-    withManagerItem(
-      path,
-      runMeshFetchTask(async () => {
-        const buffer = await fetchMeshBuffer(path, { short });
-        return new TextDecoder().decode(buffer);
-      }),
-    )
+    beginManagerItem();
+    runMeshFetchTask(async () => {
+      const buffer = await fetchMeshBuffer(path, { short });
+      return new TextDecoder().decode(buffer);
+    })
       .then((text) => {
         const fetchMs = (performance.now() - t0).toFixed(1);
         console.log(
@@ -333,18 +339,16 @@ function loadMeshWithObjSupport(urdfLoader, path, manager, done, track = null) {
 
   // STL via queued CDN fetch+retry (Pages origin is too slow for multi‑MB binaries).
   if (/\.stl$/i.test(path)) {
-    withManagerItem(
-      path,
-      runMeshFetchTask(async () => {
-        const buffer = await fetchMeshBuffer(path, { short });
-        const parseT0 = performance.now();
-        const geom = new STLLoader().parse(buffer);
-        console.log(
-          `[URDF][stl] ${short} parse=${(performance.now() - parseT0).toFixed(1)}ms (${(buffer.byteLength / 1024).toFixed(1)} KB)`,
-        );
-        return new THREE.Mesh(geom, new THREE.MeshPhongMaterial());
-      }),
-    )
+    beginManagerItem();
+    runMeshFetchTask(async () => {
+      const buffer = await fetchMeshBuffer(path, { short });
+      const parseT0 = performance.now();
+      const geom = new STLLoader().parse(buffer);
+      console.log(
+        `[URDF][stl] ${short} parse=${(performance.now() - parseT0).toFixed(1)}ms (${(buffer.byteLength / 1024).toFixed(1)} KB)`,
+      );
+      return new THREE.Mesh(geom, new THREE.MeshPhongMaterial());
+    })
       .then((mesh) => finishMesh(mesh))
       .catch((err) => finishMesh(null, err));
     return;
@@ -505,6 +509,7 @@ export async function loadRobotFromUrdf(url, { onProgress } = {}) {
     let captured = null;
     let settled = false;
     let robotCbAt = null;
+    let managerIdle = false;
 
     const finish = (fn, value) => {
       if (settled) return;
@@ -513,7 +518,35 @@ export async function loadRobotFromUrdf(url, { onProgress } = {}) {
       fn(value);
     };
 
+    /** Resolve only when robot exists, LoadingManager is idle, AND every mesh done(). */
+    const tryResolveReady = (from) => {
+      if (settled) return;
+      if (!captured || !managerIdle || track.inFlight.size > 0) {
+        if (from === "onLoad" && track.inFlight.size > 0) {
+          console.warn(
+            `[URDF][mgr] onLoad deferred — still inFlightMeshes(${track.inFlight.size}):`,
+            [...track.inFlight].map(meshShortName),
+          );
+        }
+        return;
+      }
+      const styleT0 = performance.now();
+      applyUrdfMeshesShadowMetal(captured);
+      console.log(
+        `[URDF] shadow/metal style ${(performance.now() - styleT0).toFixed(1)}ms; total ${(performance.now() - tLoad0).toFixed(1)}ms (via ${from})`,
+      );
+      finish(resolve, captured);
+    };
+
+    const prevOnMeshChange = track.onMeshChange;
+    track.onMeshChange = () => {
+      prevOnMeshChange?.();
+      // Mesh finished after a premature onLoad — settle once inFlight clears.
+      tryResolveReady("inFlight");
+    };
+
     manager.onStart = (itemUrl, loaded, total) => {
+      managerIdle = false;
       lastProgress = { loaded, total, url: itemUrl };
       console.log(
         `[URDF][mgr] onStart first=${meshShortName(itemUrl)} (${loaded}/${total}) +${(performance.now() - tLoad0).toFixed(0)}ms`,
@@ -530,6 +563,7 @@ export async function loadRobotFromUrdf(url, { onProgress } = {}) {
     };
 
     manager.onLoad = () => {
+      managerIdle = true;
       const mgrMs = (performance.now() - tLoad0).toFixed(1);
       console.log(
         `[URDF][mgr] onLoad +${mgrMs}ms (robotCb=${robotCbAt != null ? "yes" : "NO"}, inFlightMeshes=${track.inFlight.size})`,
@@ -543,12 +577,7 @@ export async function loadRobotFromUrdf(url, { onProgress } = {}) {
         );
         return;
       }
-      const styleT0 = performance.now();
-      applyUrdfMeshesShadowMetal(captured);
-      console.log(
-        `[URDF] shadow/metal style ${(performance.now() - styleT0).toFixed(1)}ms; total ${(performance.now() - tLoad0).toFixed(1)}ms`,
-      );
-      finish(resolve, captured);
+      tryResolveReady("onLoad");
     };
 
     manager.onError = (itemUrl) => {
@@ -578,6 +607,7 @@ export async function loadRobotFromUrdf(url, { onProgress } = {}) {
           `[URDF] loader.load robot callback +${robotCbAt.toFixed(1)}ms (links=${links}, joints=${joints})`,
         );
         captured = robot;
+        tryResolveReady("robotCb");
       },
       undefined,
       (error) => {
