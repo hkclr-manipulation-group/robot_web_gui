@@ -32,10 +32,13 @@ A GitHub Pages friendly robot GUI with these pieces already wired together:
 
 GitHub Pages cannot directly host your robot control backend. Use a local gateway service on the same LAN as the robots.
 
-Example:
-
 - frontend: `https://<your-user>.github.io/<repo>`
 - local gateway: `http://<your-pc-ip>:9000`
+  
+Example:
+- frontend:https://hkclr-manipulation-group.github.io/robot_web_gui/
+- local gateway: http://192.168.3.11:9000
+
 
 In the GUI:
 
