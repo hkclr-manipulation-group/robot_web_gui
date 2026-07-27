@@ -1426,8 +1426,8 @@ body.is-pseudo-fullscreen .layout {
 
   .gripper-card {
     left: 8px;
-    /* Clear compact viewer-tabs (bottom ~8px + ~46px height). */
-    bottom: 68px;
+    /* Above teach-control-bar on phones (bottom ~54px + ~34px height). */
+    bottom: 108px;
     width: min(200px, calc(48% - 12px));
     max-width: min(200px, calc(48% - 12px));
     padding: 10px;
@@ -1724,7 +1724,8 @@ body.is-pseudo-fullscreen .layout {
 
   .gripper-card {
     left: 6px;
-    bottom: 64px;
+    /* Keep above teach-control-bar (bottom ~54px + ~34px ≈ 88px). */
+    bottom: 108px;
     width: min(168px, calc(46% - 10px));
     max-width: min(168px, calc(46% - 10px));
     padding: 7px;
@@ -1995,7 +1996,8 @@ body.is-pseudo-fullscreen .layout {
 
   .gripper-card {
     left: 6px;
-    bottom: 60px;
+    /* Above teach-control-bar in compact landscape (bottom ~54px + ~34px). */
+    bottom: 100px;
     width: min(150px, calc(42% - 10px));
     max-width: min(150px, calc(42% - 10px));
     padding: 7px;
