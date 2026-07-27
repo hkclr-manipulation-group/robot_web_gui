@@ -51,13 +51,43 @@ import * as THREE from "three";
 /* DOM                                                                         */
 /* -------------------------------------------------------------------------- */
 
-const viewer = new RobotViewer(document.getElementById("viewer"));
-
 const statusEl = document.getElementById("status");
 const gatewayUrlEl = document.getElementById("gatewayUrl");
 const robotSelectEl = document.getElementById("robotSelect");
 
 const connectionBadgeEl = document.getElementById("connectionBadge");
+let viewerInitFailure = false;
+
+function createViewerFallback() {
+  const noOp = () => {};
+  return {
+    callbacks: {},
+    setDualRobot: noOp,
+    setRobot: noOp,
+    setHardwareRobotVisible: noOp,
+    setGhostRobotVisible: noOp,
+    fitToRobot: noOp,
+    resetView: noOp,
+    updateTargetPose: noOp,
+    setLabMarkers: noOp,
+    setLabTrajectories: noOp,
+    clearLabVisualization: noOp,
+  };
+}
+
+const viewer = (() => {
+  try {
+    return new RobotViewer(document.getElementById("viewer"));
+  } catch (error) {
+    console.error("RobotViewer init failed:", error);
+    viewerInitFailure = true;
+    setStatus(
+      "WebGL initialization failed. ",
+      "danger-text"
+    );
+    return createViewerFallback();
+  }
+})();
 const activeRobotTextEl = document.getElementById("activeRobotText");
 const robotIdTextEl = document.getElementById("robotIdText");
 
@@ -125,6 +155,9 @@ let latestJointPosition = null; // latest joint_pos from /stream
 /** Status bar helper. cls: "ok" | "warn" | "danger-text" | "" */
 function setStatus(text, cls = "") {
   if (!statusEl) return;
+  if (viewerInitFailure && cls !== "danger-text") {
+    return;
+  }
   statusEl.textContent = text;
   statusEl.className = `status-text ${cls}`.trim();
 }

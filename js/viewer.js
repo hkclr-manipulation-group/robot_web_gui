@@ -55,8 +55,13 @@ export class RobotViewer {
   /* ---------------- Renderer ---------------- */
 
   _initRenderer() {
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    try {
+      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch (error) {
+      throw new Error(
+        `WebGL initialization failed: ${error?.message || String(error)}`
+      );
+    }
 
     // Cap DPR for mobile (iPhone/Android often 2.5–3) to keep WebGL stable; desktop unchanged when DPR ≤ 2
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
