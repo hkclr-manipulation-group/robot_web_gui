@@ -38,6 +38,15 @@ Example:
 - frontend:https://hkclr-manipulation-group.github.io/robot_web_gui/
 - local gateway: http://192.168.3.11:9000
 
+Local host:
+
+1. Open a terminal in this project directory (`robot_web_gui`).
+2. Start a simple static file server:
+```bash
+python3 -m http.server 8000
+```
+3. Open `http://localhost:8000` in your browser.
+
 
 In the GUI:
 
