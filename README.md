@@ -5,19 +5,18 @@ A GitHub Pages friendly robot GUI with these pieces already wired together:
 - sticky 3D robot viewer
 - scrollable right-side control panel
 - URDF loading
-- joint-space control with both sliders and numeric input boxes
-- 6-DoF task-space control with both sliders and numeric input boxes
+- joint-space control with sliders
+- 6-DoF task-space control with sliders
 - browser-side numerical IK
-- joint-space and Cartesian planning
 - teach, save, load, and playback of paths
 - multi-robot selector for WiFi robot setups
-- simple local gateway example for forwarding commands to real robots
+- local gateway example for forwarding commands to real robots
 
 ## Folder structure
 
 - `index.html`, `styles.css`: UI layout and styling
 - `js/`: viewer, UI, IK, planner, teach, storage, gateway API adapter
-- `urdf/spark2.urdf`: default Spark2 URDF for preview and control
+- `urdf/robot.urdf`: default Spark2 URDF for preview and control
 - `server_examples/robot_gateway_server.py`: tiny local HTTP gateway example
 - `.nojekyll`: allows GitHub Pages to serve files directly
 
@@ -52,3 +51,4 @@ In the GUI:
 - The included IK is a generic damped least-squares numerical solver, meant for lightweight web control and preview.
 - Collision checking is not included.
 - For a production system, replace the demo gateway logic with your real robot protocol, safety checks, and watchdogs.
+  Example: python3 server_examples/rt_control_server.py
