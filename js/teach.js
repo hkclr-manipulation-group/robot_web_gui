@@ -54,6 +54,8 @@ function playbackSucceeded(result) {
  * @param {() => Record<string, number> | null} options.getRecordJointMap Joint map for teach recording (prefer live telemetry over ghost URDF).
  * @param {(text: string, cls?: string) => void} options.setStatus
  * @param {(targetMap: Record<string, number>, timeoutMs: number) => Promise<boolean>} options.waitUntilTargetReached
+ * @param {(trajectory: Record<string, number>[]) => Promise<boolean | void>} [options.executeTrajectory]
+ * @param {() => boolean} [options.isHardwareControlActive]
  * @param {() => boolean} options.isBusy
  * @param {() => void} options.onSetBusy
  * @param {() => void} options.onClearBusy
@@ -73,6 +75,8 @@ export function createTeachModule(options) {
     getRecordJointMap,
     setStatus,
     waitUntilTargetReached,
+    executeTrajectory,
+    isHardwareControlActive,
     isBusy,
     onSetBusy,
     onClearBusy,
@@ -293,6 +297,28 @@ export function createTeachModule(options) {
     return completed;
   }
 
+  /**
+   * Hardware: SDK reset/start_playback (RT internal record).
+   * Simulation stream: replay UI-captured waypoints via /move_joint.
+   */
+  async function runPlayback() {
+    if (isHardwareControlActive?.()) {
+      return runSdkPlayback();
+    }
+    if (typeof executeTrajectory === "function") {
+      onSetBusy();
+      try {
+        const result = await executeTrajectory(teachSystem.getPath());
+        return result !== false;
+      } finally {
+        onClearBusy();
+      }
+    }
+    throw new Error(
+      "Connect hardware for SDK teach playback, or stay in simulation and replay via joint waypoints."
+    );
+  }
+
   async function onTeachPlayClick() {
     if (teachUiState === "recording" || teachUiState === "playing") return;
     if (!teachSystem.count) return;
@@ -301,7 +327,7 @@ export function createTeachModule(options) {
     refreshTeachControls();
 
     try {
-      const completed = await runSdkPlayback();
+      const completed = await runPlayback();
       teachUiState = teachSystem.count ? "ready" : "idle";
       refreshTeachControls();
 

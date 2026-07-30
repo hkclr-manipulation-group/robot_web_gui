@@ -57,7 +57,77 @@ def resolve_config_prefix_path():
     return default
 
 
+def _keys_path_from_config(config_prefix):
+    """Resolve keys.json path from config.yaml rt_control.keys_path (default: keys.json)."""
+    config_yaml = os.path.join(config_prefix, "config.yaml")
+    keys_rel = "keys.json"
+    try:
+        with open(config_yaml, encoding="utf-8") as fh:
+            in_rt = False
+            for line in fh:
+                if line.strip().startswith("rt_control:"):
+                    in_rt = True
+                    continue
+                if in_rt and line and not line.startswith((" ", "\t")):
+                    break
+                match = re.match(r"\s+keys_path:\s*(\S+)", line)
+                if in_rt and match:
+                    keys_rel = match.group(1).strip("\"'")
+                    break
+    except Exception:
+        pass
+    return os.path.normpath(os.path.join(config_prefix, keys_rel))
+
+
+def _fallback_keys_paths():
+    candidates = []
+    env_keys = os.environ.get("SPARK2_KEYS_JSON", "").strip()
+    if env_keys:
+        candidates.append(env_keys)
+    candidates.extend([
+        os.path.join(parent_path, "spark2_sdk", "configuration", "keys.json"),
+        os.path.join(parent_path, "cuarm_rt_control", "src", "keys.json"),
+        os.path.join(parent_path, "cuarm_upper_software", "src", "keys.json"),
+    ])
+    return candidates
+
+
+def _ensure_client_keys(config_prefix):
+    """Ensure keys.json exists where Spark2 SDK expects it."""
+    keys_path = _keys_path_from_config(config_prefix)
+    if os.path.isfile(keys_path):
+        return keys_path
+
+    for candidate in _fallback_keys_paths():
+        if not os.path.isfile(candidate):
+            continue
+        os.makedirs(os.path.dirname(keys_path) or config_prefix, exist_ok=True)
+        try:
+            os.symlink(os.path.abspath(candidate), keys_path)
+            print(f"Linked client keys: {keys_path} -> {candidate}")
+            return keys_path
+        except FileExistsError:
+            if os.path.isfile(keys_path):
+                return keys_path
+        except OSError:
+            import shutil
+            shutil.copy2(candidate, keys_path)
+            print(f"Copied client keys to {keys_path} from {candidate}")
+            return keys_path
+
+    raise RuntimeError(
+        f"Client keys not found at {keys_path}. "
+        "Set SPARK2_KEYS_JSON, copy keys.json into the config prefix, or add "
+        "rt_control.keys_path in config.yaml (for example "
+        "../../cuarm_rt_control/src/keys.json)."
+    )
+
+
 CONFIG_PREFIX_PATH = resolve_config_prefix_path()
+try:
+    _ensure_client_keys(CONFIG_PREFIX_PATH)
+except RuntimeError as exc:
+    print(f"Warning: {exc}")
 
 robot = None
 robot_started = False

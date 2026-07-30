@@ -1267,6 +1267,8 @@ teach = createTeachModule({
   getKinematics: () => kinematics,
   getRecordJointMap: getTeachRecordJointMap,
   setStatus,
+  executeTrajectory,
+  isHardwareControlActive,
   waitUntilTargetReached,
   isBusy: () => isBusy,
   onSetBusy: () => {
