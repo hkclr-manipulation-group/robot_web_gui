@@ -83,6 +83,11 @@ export async function enableTeachModeApi(enable) {
   return post('/teach', { enable });
 }
 
+/** SDK teach playback: action = 'reset' | 'start' | 'stop'. */
+export async function playbackApi(action) {
+  return post('/playback', { action });
+}
+
 export async function sendJointCommand(jointNames, jointValues, interpolation = {}) {
   return post('/move_joint', { joint_names: jointNames, joint_values: jointValues, ...interpolation });
 }

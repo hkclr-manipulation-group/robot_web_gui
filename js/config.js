@@ -70,7 +70,7 @@ export const VIEWER = {
 
 /** Teach-mode timing (see `teach.js`). */
 export const TEACH = {
-  /** Interval (ms) between recorded joint samples while recording a path. */
+  /** Interval (ms) between UI joint samples while recording (preview only; RT records internally). */
   recordSampleIntervalMs: 100,
 };
 
@@ -89,8 +89,8 @@ export const RT_INTERPOLATION = {
     interpolation_acc_time: 5,
   },
   /**
-   * Teach playback (`executeTrajectory`): waypoint index 0 uses `first`; index >= 1 uses `rest`.
-   * A single-point path never reads `rest` — only `first` applies.
+   * Legacy teach waypoint timing (unused by SDK teach/playback; kept for executeTrajectory).
+   * Waypoint index 0 uses `first`; index >= 1 uses `rest`.
    */
   teach: {
     first: {

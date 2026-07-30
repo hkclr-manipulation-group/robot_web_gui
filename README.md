@@ -8,7 +8,7 @@ A GitHub Pages friendly robot GUI with these pieces already wired together:
 - joint-space control with sliders
 - 6-DoF task-space control with sliders
 - browser-side numerical IK
-- teach, save, load, and playback of paths
+- teach / playback via Spark2 SDK (`start_teach` / `reset_playback` / `start_playback`)
 - multi-robot selector for WiFi robot setups
 - local gateway example for forwarding commands to real robots
 

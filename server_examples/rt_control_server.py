@@ -560,6 +560,30 @@ def enable_teach(robot_id, payload):
     return execute_robot_action(robot_id, action, require_hardware=True)
 
 
+def control_playback(robot_id, payload):
+    """SDK teach/playback lifecycle: reset | start | stop (see teach_and_playback.py)."""
+    global teach_active
+
+    if teach_active:
+        return False, "Disable teach mode first."
+
+    action = str(payload.get("action", "")).strip().lower()
+    if action not in ("reset", "start", "stop"):
+        return False, "playback action must be reset, start, or stop."
+
+    def run():
+        robot_instance = _get_robot()
+        if action == "reset":
+            robot_instance.reset_playback()
+        elif action == "start":
+            robot_instance.start_playback()
+        else:
+            robot_instance.stop_playback()
+        print(f"[playback] action={action}")
+
+    return execute_robot_action(robot_id, run, require_hardware=True)
+
+
 def post_request(robot_id, payload, handler):
     if robot_id not in KNOWN_ROBOT_IDS:
         return {"ok": False, "error": f"Unknown robot_id: {robot_id}"}
@@ -662,6 +686,18 @@ class Handler(BaseHTTPRequestHandler):
                 {"path": self.path, **data},
                 enable_teach,
             )
+        elif self.path == "/playback":
+            result = post_request(
+                robot_id,
+                {"path": self.path, **data},
+                control_playback,
+            )
+        elif self.path == "/stop":
+            result = post_request(
+                robot_id,
+                {"path": self.path, "action": "stop"},
+                control_playback,
+            )
         else:
             result = {"ok": False, "error": f"Unknown path: {self.path}"}
 
@@ -678,6 +714,8 @@ class Handler(BaseHTTPRequestHandler):
             "/move_pose_incremental",
             "/move_gripper",
             "/teach",
+            "/playback",
+            "/stop",
         ):
             status = 400
         else:

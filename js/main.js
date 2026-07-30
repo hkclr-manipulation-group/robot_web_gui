@@ -22,7 +22,6 @@ import {
   sendJointCommand,
   sendPoseCommand,
   sendPoseIncrementalCommand,
-  sendStopCommand,
   sendZeroCommand,
   setActiveRobot,
   setGatewayUrl,
@@ -1268,8 +1267,11 @@ teach = createTeachModule({
   getKinematics: () => kinematics,
   getRecordJointMap: getTeachRecordJointMap,
   setStatus,
-  executeTrajectory,
-  sendStopCommand,
+  waitUntilTargetReached,
+  isBusy: () => isBusy,
+  onSetBusy: () => {
+    isBusy = true;
+  },
   onClearBusy: () => {
     isBusy = false;
   },

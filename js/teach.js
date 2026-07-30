@@ -1,7 +1,6 @@
 import { STORAGE_KEYS, TEACH } from "./config.js";
-import { enableTeachModeApi } from "./api.js";
-
-import { formatJointValue } from "./utils.js";
+import { enableTeachModeApi, playbackApi } from "./api.js";
+import { formatJointValue, sleep } from "./utils.js";
 
 function jointProgress(value) {
   const min = -Math.PI;
@@ -43,14 +42,20 @@ function setTeachButtonState(buttonEl, enabled) {
   buttonEl.classList.toggle("is-disabled", !enabled);
 }
 
+function playbackSucceeded(result) {
+  if (result.mode === "preview") return true;
+  return !!result.data?.success;
+}
+
 /**
  * @param {object} options
  * @param {{ teachCountEl: HTMLElement | null; pathPreviewEl: HTMLElement | null; jointContainerTeachEl: HTMLElement | null; jointContainerEl: HTMLElement | null; teachRecordBtnEl: HTMLElement | null; teachPlayBtnEl: HTMLElement | null; teachStopBtnEl: HTMLElement | null }} options.elements
  * @param {() => import("./kinematics.js").RobotKinematics | null} options.getKinematics
  * @param {() => Record<string, number> | null} options.getRecordJointMap Joint map for teach recording (prefer live telemetry over ghost URDF).
  * @param {(text: string, cls?: string) => void} options.setStatus
- * @param {(trajectory: Record<string, number>[]) => Promise<boolean | void>} options.executeTrajectory
- * @param {() => Promise<unknown>} options.sendStopCommand
+ * @param {(targetMap: Record<string, number>, timeoutMs: number) => Promise<boolean>} options.waitUntilTargetReached
+ * @param {() => boolean} options.isBusy
+ * @param {() => void} options.onSetBusy
  * @param {() => void} options.onClearBusy
  */
 export function createTeachModule(options) {
@@ -67,8 +72,9 @@ export function createTeachModule(options) {
     getKinematics,
     getRecordJointMap,
     setStatus,
-    executeTrajectory,
-    sendStopCommand,
+    waitUntilTargetReached,
+    isBusy,
+    onSetBusy,
     onClearBusy,
   } = options;
 
@@ -231,6 +237,62 @@ export function createTeachModule(options) {
     }
   }
 
+  /**
+   * Hardware playback via Spark2 SDK (reset_playback → start_playback),
+   * matching spark2_sdk/examples/python/teach_and_playback.py.
+   * Frontend poses are UI-only; the RT controller replays its internal record.
+   */
+  async function runSdkPlayback() {
+    onSetBusy();
+    setStatus("Moving to playback start (reset_playback)...", "warn");
+
+    const resetResult = await playbackApi("reset");
+    if (!playbackSucceeded(resetResult)) {
+      onClearBusy();
+      throw new Error(resetResult.data?.message || "reset_playback failed.");
+    }
+
+    const firstPose = teachSystem.getPath()[0];
+    if (firstPose && resetResult.mode !== "preview") {
+      const reached = await waitUntilTargetReached(firstPose, 30000);
+      if (!reached) {
+        console.warn(
+          "[teach] reset_playback start pose not confirmed within 30s, continuing."
+        );
+      }
+    } else {
+      await sleep(500);
+    }
+
+    if (!isBusy()) {
+      try {
+        await playbackApi("stop");
+      } catch (error) {
+        console.warn("Failed to stop playback after cancel:", error);
+      }
+      return false;
+    }
+
+    setStatus("SDK playback running (start_playback)...", "warn");
+    const startResult = await playbackApi("start");
+    if (!playbackSucceeded(startResult)) {
+      onClearBusy();
+      throw new Error(startResult.data?.message || "start_playback failed.");
+    }
+
+    // Approximate wall-clock duration from UI sampling cadence (+ margin).
+    const durationMs =
+      Math.max(1, teachSystem.count) * TEACH.recordSampleIntervalMs + 3000;
+    const deadline = Date.now() + durationMs;
+    while (isBusy() && Date.now() < deadline) {
+      await sleep(100);
+    }
+
+    const completed = isBusy();
+    onClearBusy();
+    return completed;
+  }
+
   async function onTeachPlayClick() {
     if (teachUiState === "recording" || teachUiState === "playing") return;
     if (!teachSystem.count) return;
@@ -239,14 +301,17 @@ export function createTeachModule(options) {
     refreshTeachControls();
 
     try {
-      const completed = await executeTrajectory(teachSystem.getPath());
+      const completed = await runSdkPlayback();
       teachUiState = teachSystem.count ? "ready" : "idle";
       refreshTeachControls();
 
       if (!completed) {
         setStatus("Teach playback stopped.", "warn");
+      } else {
+        setStatus("Teach playback completed.", "ok");
       }
     } catch (error) {
+      onClearBusy();
       teachUiState = teachSystem.count ? "ready" : "idle";
       refreshTeachControls();
       setStatus(error.message || "Teach playback failed.", "danger-text");
@@ -285,11 +350,11 @@ export function createTeachModule(options) {
 
     onClearBusy();
     try {
-      await sendStopCommand();
+      await playbackApi("stop");
     } catch (error) {
-      console.warn("Failed to send stop command:", error);
+      console.warn("Failed to send stop_playback:", error);
     }
-    // Final status comes from executeTrajectory / onTeachPlayClick ("…stopped").
+    // Final status comes from runSdkPlayback / onTeachPlayClick ("…stopped").
     teachUiState = teachSystem.count ? "ready" : "idle";
     refreshTeachControls();
   }
