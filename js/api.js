@@ -117,3 +117,23 @@ export async function sendZeroCommand(jointNames, jointValues) {
 export async function sendGripperCommand(pos, v = 50, t = 0) {
   return post('/move_gripper', { gripper_pos: pos, v, t });
 }
+
+export async function sendJogJointCommand(jogCommands, opts = {}) {
+  const body = { jog_commands: jogCommands };
+  if (opts.speed != null) body.speed = opts.speed;
+  if (opts.accTime != null) body.acc_time = opts.accTime;
+  if (opts.jogIntervalMs != null) body.jog_interval_ms = opts.jogIntervalMs;
+  return post('/jog_joint', body);
+}
+
+export async function sendJogCartesianCommand(jogCommands, opts = {}) {
+  const body = { jog_commands: jogCommands };
+  if (opts.speed != null) body.speed = opts.speed;
+  if (opts.accTime != null) body.acc_time = opts.accTime;
+  if (opts.jogIntervalMs != null) body.jog_interval_ms = opts.jogIntervalMs;
+  return post('/jog_cartesian', body);
+}
+
+export async function sendJogStopCommand() {
+  return post('/jog_stop', {});
+}

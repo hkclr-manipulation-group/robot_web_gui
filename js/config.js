@@ -74,6 +74,14 @@ export const TEACH = {
   recordSampleIntervalMs: 100,
 };
 
+/** Slider / jog control (joint and task space). Edit here; not read from config.yaml. */
+export const SLIDER_CONTROL = {
+  mode: 'jog', // 'incremental' | 'jog'
+  jogIntervalMs: 40,
+  jogSpeed: 50,
+  jogAccTime: 0,
+};
+
 /**
  * Real-time joint interpolation for the RT gateway (`/home`, `/move_joint`, teach playback).
  * Unspecified timing fields are resolved by backend defaults from robot config yaml.

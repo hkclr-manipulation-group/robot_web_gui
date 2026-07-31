@@ -129,6 +129,13 @@ try:
 except RuntimeError as exc:
     print(f"Warning: {exc}")
 
+
+# Jog defaults (aligned with robot_web_gui/js/config.js SLIDER_CONTROL); overridable per request.
+_DEFAULT_JOG_INTERVAL_MS = 40
+_DEFAULT_JOG_SPEED = 50
+_DEFAULT_JOG_ACC_TIME = 0.0
+_jog_interval_sec = _DEFAULT_JOG_INTERVAL_MS / 1000.0
+
 robot = None
 robot_started = False
 robot_hardware_connected = False
@@ -138,6 +145,14 @@ runtime_connect_requested = False
 runtime_connect_lock = threading.Lock()
 send_to_robot_lock = threading.Lock()
 controller_lock = threading.Lock()
+_jog_lock = threading.Lock()
+_jog_state = {
+    "space": None,
+    "cmds": [0] * 6,
+    "active": False,
+    "speed": _DEFAULT_JOG_SPEED,
+    "acc_time": _DEFAULT_JOG_ACC_TIME,
+}
 current_controller_ip = None
 last_heartbeat = 0
 last_stream_error = ""
@@ -208,9 +223,17 @@ def request_runtime_connect():
         runtime_connect_requested = True
 
 
+def _stop_jog_state():
+    with _jog_lock:
+        _jog_state["active"] = False
+        _jog_state["space"] = None
+        _jog_state["cmds"] = [0] * 6
+
+
 def _reset_robot_session():
     """Release Spark2 UDP resources so panel port can be reused after a failed start()."""
     global robot, robot_started, robot_hardware_connected, teach_active
+    _stop_jog_state()
     if robot is not None:
         old_robot = robot
         robot = None
@@ -279,7 +302,112 @@ def release_hardware_control():
     if robot_hardware_connected:
         robot_instance.disconnect_hardware()
         robot_hardware_connected = False
+    _stop_jog_state()
     return True, "Success"
+
+
+def _jog_worker():
+    while True:
+        with _jog_lock:
+            active = _jog_state["active"]
+            space = _jog_state["space"]
+            cmds = list(_jog_state["cmds"])
+            speed = _jog_state["speed"]
+            acc_time = _jog_state["acc_time"]
+            interval_sec = _jog_interval_sec
+        if robot_started and active and space:
+            try:
+                acquired = send_to_robot_lock.acquire(timeout=0.05)
+                if not acquired:
+                    time.sleep(interval_sec)
+                    continue
+                try:
+                    robot_instance = _get_robot()
+                    if space == "joint":
+                        robot_instance.jog_joint(cmds, speed, acc_time)
+                    elif space == "cartesian":
+                        robot_instance.jog_cartesian(cmds, speed, acc_time)
+                finally:
+                    send_to_robot_lock.release()
+            except Exception as exc:
+                message = str(exc)
+                print(f"[jog] tick failed: {message}")
+                if "control lost" in message.lower():
+                    _stop_jog_state()
+                    _reset_robot_session()
+        time.sleep(interval_sec)
+
+
+def _normalize_jog_commands(raw):
+    if raw is None:
+        return [0] * 6
+    if len(raw) != 6:
+        raise ValueError("jog_commands must have length 6")
+    name_map = {
+        "stop": 0, "increase": 1, "decrease": 2,
+        "inc": 1, "dec": 2, "+": 1, "-": 2,
+    }
+    out = []
+    for item in raw:
+        if isinstance(item, str):
+            key = item.strip().lower()
+            if key not in name_map:
+                raise ValueError(f"Invalid jog command: {item}")
+            out.append(name_map[key])
+        else:
+            value = int(item)
+            if value not in (0, 1, 2):
+                raise ValueError(f"Invalid jog command value: {value}")
+            out.append(value)
+    return out
+
+
+def _update_jog_state(payload, space):
+    global _jog_interval_sec
+    cmds = _normalize_jog_commands(payload.get("jog_commands"))
+    with _jog_lock:
+        _jog_state["space"] = space
+        _jog_state["cmds"] = cmds
+        _jog_state["active"] = any(c != 0 for c in cmds)
+        if "speed" in payload:
+            _jog_state["speed"] = int(payload["speed"])
+        if "acc_time" in payload:
+            _jog_state["acc_time"] = float(payload["acc_time"])
+        elif "jog_acc_time" in payload:
+            _jog_state["acc_time"] = float(payload["jog_acc_time"])
+        if "jog_interval_ms" in payload:
+            _jog_interval_sec = max(10, int(payload["jog_interval_ms"])) / 1000.0
+    return True, "Success"
+
+
+def jog_joint(robot_id, payload):
+    if teach_active:
+        return False, "Disable teach mode first."
+    request_runtime_connect()
+    try:
+        return _update_jog_state(payload, "joint")
+    except ValueError as exc:
+        return False, str(exc)
+
+
+def jog_cartesian(robot_id, payload):
+    if teach_active:
+        return False, "Disable teach mode first."
+    request_runtime_connect()
+    try:
+        return _update_jog_state(payload, "cartesian")
+    except ValueError as exc:
+        return False, str(exc)
+
+
+def jog_stop(robot_id, payload):
+    _stop_jog_state()
+
+    def action():
+        if robot_started:
+            _get_robot().jog_stop()
+
+    return execute_robot_action(robot_id, action)
 
 
 def _runtime_startup_worker():
@@ -508,6 +636,8 @@ def move_joint(robot_id, payload):
     if teach_active:
         return False, "Disable teach mode first."
 
+    _stop_jog_state()
+
     joint_values = _joint_values_from_payload(payload)
     if joint_values is None:
         return False, "No valid joint_values received"
@@ -540,6 +670,8 @@ def move_pose(robot_id, payload):
     if teach_active:
         return False, "Disable teach mode first."
 
+    _stop_jog_state()
+
     pose_values = payload.get("pose_values")
     if pose_values is None or len(pose_values) < 6:
         return False, "Invalid pose data"
@@ -561,6 +693,8 @@ def move_pose_incremental(robot_id, payload):
 
     if teach_active:
         return False, "Disable teach mode first."
+
+    _stop_jog_state()
 
     pose_delta_values = payload.get("pose_delta_values")
     if pose_delta_values is None or len(pose_delta_values) < 6:
@@ -767,6 +901,24 @@ class Handler(BaseHTTPRequestHandler):
                 {"path": self.path, **data},
                 move_gripper,
             )
+        elif self.path == "/jog_joint":
+            result = post_request(
+                robot_id,
+                {"path": self.path, **data},
+                jog_joint,
+            )
+        elif self.path == "/jog_cartesian":
+            result = post_request(
+                robot_id,
+                {"path": self.path, **data},
+                jog_cartesian,
+            )
+        elif self.path == "/jog_stop":
+            result = post_request(
+                robot_id,
+                {"path": self.path, **data},
+                jog_stop,
+            )
         elif self.path == "/teach":
             result = post_request(
                 robot_id,
@@ -800,6 +952,9 @@ class Handler(BaseHTTPRequestHandler):
             "/move_pose",
             "/move_pose_incremental",
             "/move_gripper",
+            "/jog_joint",
+            "/jog_cartesian",
+            "/jog_stop",
             "/teach",
             "/playback",
             "/stop",
@@ -835,6 +990,7 @@ if __name__ == "__main__":
     print(f"Spark2 SDK config prefix: {CONFIG_PREFIX_PATH}")
     print("Recommended: start spark2_v2_rt_control first, then open the Web UI.")
     threading.Thread(target=_runtime_startup_worker, daemon=True).start()
+    threading.Thread(target=_jog_worker, daemon=True).start()
     try:
         server = ThreadedHTTPServer(("0.0.0.0", 9000), Handler)
         print("Gateway listening on http://0.0.0.0:9000")

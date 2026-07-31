@@ -28,6 +28,7 @@ export class TaskSpaceUI {
     
     // 新增：控制模式（绝对位姿 / 增量位姿）
     this.controlMode = options.controlMode ?? 1; // 0: incremental, 1: absolute (默认绝对位姿)
+    this.sliderMode = options.sliderMode ?? "incremental"; // incremental | jog
   }
 
   /* ---------------- clear ---------------- */
@@ -217,6 +218,10 @@ export class TaskSpaceUI {
     );
   }
 
+  setSliderMode(mode) {
+    this.sliderMode = mode === "jog" ? "jog" : "incremental";
+  }
+
   #createAxisCard(axis) {
     const limits = TASK_LIMITS[axis.key];
     const currentValue = this.currentPose[axis.key] || 0;
@@ -347,6 +352,17 @@ export class TaskSpaceUI {
       const ui = this.uiMap[axis.key];
       if (!ui) return;
 
+      if (this.sliderMode === "jog") {
+        if (ui.lastDir === 0) return;
+        ui.lastDir = 0;
+        this.interactingAxes.delete(axis.key);
+        this.callbacks?.onJogRelease?.(axis.key);
+        setTimeout(() => {
+          if (ui.slider) ui.slider.value = "0";
+        }, 10);
+        return;
+      }
+
       // 如果没有正在运行的定时器，说明已经停止过了
       if (!ui.intervalId && ui.lastDir === 0) {
         console.log(`[stopMoving] ${axis.key}: Already stopped, skipping`);
@@ -380,6 +396,22 @@ export class TaskSpaceUI {
     // 监听 input 事件 - 使用阈值判断方向
     slider.addEventListener("input", (e) => {
       const rawVal = parseFloat(e.target.value);
+
+      if (this.sliderMode === "jog") {
+        const ui = this.uiMap[axis.key];
+        let cmd = 0;
+        if (rawVal > 0.5) cmd = 1;
+        else if (rawVal < -0.5) cmd = 2;
+        if (cmd !== 0) {
+          this.interactingAxes.add(axis.key);
+          ui.lastDir = cmd;
+          this.callbacks?.onJogInput?.(axis.key, cmd);
+        } else if (ui?.lastDir !== 0) {
+          stopMoving();
+        }
+        return;
+      }
+
       console.log(`[Slider Input] ${axis.key}: rawVal=${rawVal}, type=${typeof rawVal}`);
       
       // 阈值判断：大于0.5视为向右/向上，小于-0.5视为向左/向下

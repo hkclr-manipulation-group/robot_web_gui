@@ -18,11 +18,16 @@ export class JointsUI {
     // 可配置参数
     this.intervalMs = options.intervalMs ?? 500; // 连续调节的时间间隔（毫秒），默认500ms
     this.stepDeg = options.stepDeg ?? 1; // 每次步进的角度，默认1度
+    this.sliderMode = options.sliderMode ?? "incremental"; // incremental | jog
 
     this.jointMap = {};
     this.uiMap = {}; // 缓存DOM
     this.jointNames = [];
     this.interactingJoints = new Set(); // 记录正在交互的关节
+  }
+
+  setSliderMode(mode) {
+    this.sliderMode = mode === "jog" ? "jog" : "incremental";
   }
 
   /* ---------------- clear ---------------- */
@@ -317,6 +322,17 @@ export class JointsUI {
       const ui = this.uiMap[name];
       if (!ui) return;
 
+      if (this.sliderMode === "jog") {
+        if (ui.lastDir === 0) return;
+        ui.lastDir = 0;
+        this.interactingJoints.delete(name);
+        this.callbacks?.onJogRelease?.(name);
+        setTimeout(() => {
+          if (ui.slider) ui.slider.value = "0";
+        }, 10);
+        return;
+      }
+
       // 如果没有正在运行的定时器，说明已经停止过了
       if (!ui.intervalId && ui.lastDir === 0) {
         console.log(`[stopMoving] ${name}: Already stopped, skipping`);
@@ -350,6 +366,22 @@ export class JointsUI {
     // 监听 input 事件 - 使用阈值判断方向
     slider.addEventListener("input", (e) => {
       const rawVal = parseFloat(e.target.value);
+
+      if (this.sliderMode === "jog") {
+        const ui = this.uiMap[name];
+        let cmd = 0;
+        if (rawVal > 0.5) cmd = 1;
+        else if (rawVal < -0.5) cmd = 2;
+        if (cmd !== 0) {
+          this.interactingJoints.add(name);
+          ui.lastDir = cmd;
+          this.callbacks?.onJogInput?.(name, cmd);
+        } else if (ui?.lastDir !== 0) {
+          stopMoving();
+        }
+        return;
+      }
+
       console.log(`[Slider Input] ${name}: rawVal=${rawVal}, type=${typeof rawVal}`);
       
       // 阈值判断：大于0.5视为向右，小于-0.5视为向左
