@@ -203,9 +203,9 @@
   </joint>
   <link name="gripper_base_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="-1.57942233208752E-07 0.00250604382925193 0.0631877877516168"/>
-      <mass value="0.180107205767477"/>
-      <inertia ixx="6.33661939987712E-05" ixy="4.66914369644357E-10" ixz="2.88208917523732E-10" iyy="0.000152888381072935" iyz="2.01407920642687E-06" izz="0.000202732584893993"/>
+      <origin rpy="0 0 0" xyz="-4.57881274589476E-07 0.00292048565174834 0.035228292855448"/>
+      <mass value="0.139307939402755"/>
+      <inertia ixx="5.09788715698113E-05" ixy="1.05201596434374E-09" ixz="2.54812926574347E-10" iyy="6.93741051330098E-05" iyz="-3.43895263735984E-07" izz="0.000109465850575503"/>
     </inertial>
     <visual name="base_link_visual">
       <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -222,9 +222,9 @@
   </link>
   <link name="gripper_L1">
     <inertial>
-      <origin rpy="0 0 0" xyz="-0.00123044594965598 -0.063549769597962 -0.0172831044410772"/>
-      <mass value="0.0622508734002078"/>
-      <inertia ixx="1.73001393087776E-05" ixy="4.86585715985389E-07" ixz="6.81314911156305E-09" iyy="1.18938334777558E-05" iyz="-2.66725390234448E-06" izz="2.12574548193553E-05"/>
+      <origin rpy="0 0 0" xyz="-0.0027017 -0.065055 -0.017375"/>
+      <mass value="0.068045"/>
+      <inertia ixx="1.738E-05" ixy="4.8616E-07" ixz="6.8131E-09" iyy="1.1991E-05" iyz="-2.6673E-06" izz="2.134E-05"/>
     </inertial>
     <visual name="L1_visual">
       <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -240,17 +240,17 @@
     </collision>
   </link>
   <joint name="gripper_J1" type="prismatic">
-    <origin rpy="1.5708 0 -1.5708" xyz="0.031745 0 0.18389"/>
+    <origin rpy="1.5708 0 -1.5708" xyz="0.047697 0 0.16189"/>
     <parent link="gripper_base_link"/>
     <child link="gripper_L1"/>
     <axis xyz="0 0 -1"/>
-    <limit effort="10" lower="-0.03" upper="0.01" velocity="10"/>
+    <limit effort="5" lower="-0.0477" upper="0" velocity="10"/>
   </joint>
   <link name="gripper_L2">
     <inertial>
-      <origin rpy="0 0 0" xyz="-0.000623036198990269 -0.062457253871118 -0.0172832135410684"/>
-      <mass value="0.0622502347047371"/>
-      <inertia ixx="1.72985623396128E-05" ixy="4.76043449608983E-07" ixz="8.17797301245003E-08" iyy="1.18439595295091E-05" iyz="-2.66697226003315E-06" izz="2.12061388260076E-05"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual name="L2_visual">
       <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -266,11 +266,11 @@
     </collision>
   </link>
   <joint name="gripper_J1_1" type="prismatic">
-    <origin rpy="1.5708 0 1.5708" xyz="-0.031745 0 0.18188"/>
+    <origin rpy="1.5708 0 1.5708" xyz="-0.047697 0 0.16188"/>
     <parent link="gripper_base_link"/>
     <child link="gripper_L2"/>
     <axis xyz="0 0 1"/>
-    <limit effort="10" lower="-0.01" upper="0.03" velocity="10"/>
+    <limit effort="5" lower="0" upper="0.0477" velocity="10"/>
     <mimic joint="gripper_J1" multiplier="-1" offset="0"/>
   </joint>
   <joint name="gripper_J0" type="fixed">
