@@ -134,6 +134,8 @@ robot_started = False
 robot_hardware_connected = False
 teach_active = False
 runtime_start_lock = threading.Lock()
+runtime_connect_requested = False
+runtime_connect_lock = threading.Lock()
 send_to_robot_lock = threading.Lock()
 controller_lock = threading.Lock()
 current_controller_ip = None
@@ -199,6 +201,13 @@ def _format_runtime_error(exc):
     return message
 
 
+def request_runtime_connect():
+    """Defer SDK connect until /stream or /ping (matches upper_software starting after rt_control)."""
+    global runtime_connect_requested
+    with runtime_connect_lock:
+        runtime_connect_requested = True
+
+
 def _reset_robot_session():
     """Release Spark2 UDP resources so panel port can be reused after a failed start()."""
     global robot, robot_started, robot_hardware_connected, teach_active
@@ -220,6 +229,8 @@ def ensure_robot_runtime():
     """Start Spark2 UDP session for /stream (panel simulation until Connect)."""
     global robot_started, teach_active
 
+    request_runtime_connect()
+
     if robot_started:
         return True, "Success"
 
@@ -238,7 +249,7 @@ def ensure_robot_runtime():
 
 
 def ensure_hardware_control():
-    """Connect to real hardware using the same sequence as Qt ConnectionButton."""
+    """Connect to real hardware: simulation=false, setup transition, enable all joints."""
     global robot_hardware_connected
 
     ensure_robot_runtime()
@@ -275,6 +286,11 @@ def _runtime_startup_worker():
     global last_stream_error
     while True:
         if robot_started:
+            time.sleep(RUNTIME_RETRY_SEC)
+            continue
+        with runtime_connect_lock:
+            should_connect = runtime_connect_requested
+        if not should_connect:
             time.sleep(RUNTIME_RETRY_SEC)
             continue
         try:
@@ -713,6 +729,7 @@ class Handler(BaseHTTPRequestHandler):
         robot_id = data.get("robot_id", "preview-arm")
 
         if self.path == "/ping":
+            request_runtime_connect()
             result = {"ok": True, "message": "gateway alive", "robot_id": robot_id}
         elif self.path == "/disconnect":
             result = post_request(
@@ -795,6 +812,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/stream":
+            request_runtime_connect()
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -815,12 +833,13 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 if __name__ == "__main__":
     print(f"Spark2 SDK config prefix: {CONFIG_PREFIX_PATH}")
+    print("Recommended: start spark2_v2_rt_control first, then open the Web UI.")
     threading.Thread(target=_runtime_startup_worker, daemon=True).start()
     try:
         server = ThreadedHTTPServer(("0.0.0.0", 9000), Handler)
         print("Gateway listening on http://0.0.0.0:9000")
         print("Using Spark2 Python SDK.")
-        print("State stream starts once rt_control is reachable.")
+        print("State stream connects on first /stream or /ping (after rt_control is up).")
         server.serve_forever()
     except KeyboardInterrupt:
         print("Ctrl+C detected. Exiting...")
