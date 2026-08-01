@@ -163,6 +163,7 @@ export class JointsUI {
    * @param {number[]} q 遥测关节向量（基础→末端，与运动学/网关 J1…J6 一致；面板 jointNames 为反序展示）
    * @param {{ updateGhostUrdfJoints?: boolean }} options
    *        updateGhostUrdfJoints=false 时：只更新面板反映真实硬件，不挪动仿真 URDF（用于滞后对比）
+   *        jog 模式下正在点动的关节仍会更新角度读数/进度条，但不改方向滑条（-1~1）
    */
   syncFromStreamData(q, options = {}) {
     const updateGhostUrdfJoints =
@@ -170,11 +171,14 @@ export class JointsUI {
 
     const n = this.jointNames.length;
     this.jointNames.forEach((name, index) => {
-      if (this.interactingJoints.has(name)) {
+      const value = q[n - 1 - index];
+      const isInteracting = this.interactingJoints.has(name);
+
+      // Incremental drag: skip stream to avoid fighting the slider.
+      // Jog: slider is direction-only (-1/0/1); refresh angle readout + progress bar live.
+      if (isInteracting && this.sliderMode !== "jog") {
         return;
       }
-
-      const value = q[n - 1 - index];
 
       this.setJointValue(name, value, true, updateGhostUrdfJoints);
 

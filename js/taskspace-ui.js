@@ -103,8 +103,19 @@ export class TaskSpaceUI {
     });
   }
 
+  /**
+   * @param {object} pose Task-space pose in UI units (m / deg)
+   * jog 模式下方向滑条为 -1/0/1，仍实时刷新各轴读数与进度条
+   */
   syncFromStreamData(pose) {
-    // 如果有正在被用户交互，跳过同步以避免冲突
+    if (!pose) return;
+
+    // Jog: slider is direction-only; refresh all axis readouts from telemetry.
+    if (this.sliderMode === "jog") {
+      this.setPose(pose);
+      return;
+    }
+
     if (this.interactingAxes.size > 0) {
       return;
     }
