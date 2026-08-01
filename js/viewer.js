@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { VIEWER } from "./config.js";
 import { getRobotTipLink } from "./kinematics.js";
 
 export class RobotViewer {
@@ -21,6 +22,8 @@ export class RobotViewer {
 
     this._lock = false;
     this._dragging = false;
+    /** @type {'translate' | 'rotate'} */
+    this._transformMode = "translate";
     this._viewWidth = 0;
     this._viewHeight = 0;
     this._resizeRaf = 0;
@@ -155,6 +158,90 @@ export class RobotViewer {
 
     });
 
+    this.#removeNegativeTranslateArrows();
+    this.setTransformMode("translate");
+    this.#bindTransformModeKeys();
+
+  }
+
+  /**
+   * Hide negative-side translate arrowheads; keep axis lines + pickers for bidirectional drag.
+   */
+  #removeNegativeTranslateArrows() {
+
+    const gizmo = this.transform._gizmo?.gizmo?.translate;
+    if (!gizmo) return;
+
+    const toRemove = [];
+
+    gizmo.children.forEach((child) => {
+
+      if (!child.geometry || !["X", "Y", "Z"].includes(child.name)) return;
+
+      child.geometry.computeBoundingBox();
+      const center = new THREE.Vector3();
+      child.geometry.boundingBox.getCenter(center);
+
+      const isNegative =
+        (child.name === "X" && center.x < -0.05)
+        || (child.name === "Y" && center.y < -0.05)
+        || (child.name === "Z" && center.z < -0.05);
+
+      if (isNegative) toRemove.push(child);
+
+    });
+
+    toRemove.forEach((child) => {
+
+      gizmo.remove(child);
+      child.geometry?.dispose?.();
+      child.material?.dispose?.();
+
+    });
+
+  }
+
+  #bindTransformModeKeys() {
+
+    this._onTransformModeKeyDown = (event) => {
+
+      if (event.target instanceof HTMLInputElement
+        || event.target instanceof HTMLTextAreaElement
+        || event.target instanceof HTMLSelectElement
+        || event.target?.isContentEditable) {
+        return;
+      }
+
+      const key = event.key?.toLowerCase();
+      if (key === "t") this.setTransformMode("translate");
+      else if (key === "r") this.setTransformMode("rotate");
+
+    };
+
+    window.addEventListener("keydown", this._onTransformModeKeyDown);
+
+  }
+
+  /**
+   * @param {'translate' | 'rotate'} mode
+   */
+  setTransformMode(mode) {
+
+    if (mode !== "translate" && mode !== "rotate") return;
+
+    this._transformMode = mode;
+    this.transform.setMode(mode);
+    // Translate in world (base-aligned); rotate in local (EE-aligned).
+    this.transform.setSpace(mode === "translate" ? "world" : "local");
+    this.callbacks?.onTransformModeChange?.(mode);
+
+  }
+
+  /** @returns {'translate' | 'rotate'} */
+  getTransformMode() {
+
+    return this._transformMode;
+
   }
 
   /* ---------------- Lights ---------------- */
@@ -286,10 +373,10 @@ export class RobotViewer {
     if (this.ghostRobot) this.scene.add(this.ghostRobot);
     if (this.hardwareRobot) this.scene.add(this.hardwareRobot);
 
-    if (this.hardwareRobot) {
+    if (this.hardwareRobot && VIEWER.showEndEffectorAxes) {
       this._eeAxesHardware = this.#attachEndEffectorAxes(this.hardwareRobot);
     }
-    if (this.ghostRobot) {
+    if (this.ghostRobot && VIEWER.showEndEffectorAxes) {
       this._eeAxesGhost = this.#attachEndEffectorAxes(this.ghostRobot);
     }
 

@@ -66,6 +66,8 @@ export const PATH_DEFAULTS = {
 export const VIEWER = {
   /** Show ghost (command / IK preview) robot. When false, only the hardware arm is shown when telemetry is available. */
   showGhostRobot: true,
+  /** RGB axes on the tip link (X red / Y green / Z blue). */
+  showEndEffectorAxes: false,
 };
 
 /** Teach-mode timing (see `teach.js`). */

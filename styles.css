@@ -522,6 +522,46 @@ body.is-pseudo-fullscreen .layout {
 }
 
 /* End Effector Pose Card - Floating on viewer */
+.gizmo-mode-bar {
+  position: absolute;
+  top: 72px;
+  left: 12px;
+  z-index: 50;
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(19, 33, 62, 0.08);
+}
+
+.gizmo-mode-btn {
+  min-width: 64px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transform: none;
+}
+
+.gizmo-mode-btn:hover {
+  background: rgba(31, 42, 61, 0.06);
+  transform: none;
+}
+
+.gizmo-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 .ee-pose-card {
   background: #ffffff;
   border-radius: 24px;
@@ -1730,6 +1770,21 @@ body.is-pseudo-fullscreen .layout {
     max-width: min(168px, calc(46% - 10px));
     padding: 7px;
     border-radius: 10px;
+  }
+
+  .gizmo-mode-bar {
+    top: 58px;
+    left: 8px;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+  }
+
+  .gizmo-mode-btn {
+    min-width: 52px;
+    padding: 6px 8px;
+    font-size: 11px;
+    border-radius: 8px;
   }
 
   .ee-pose-title,

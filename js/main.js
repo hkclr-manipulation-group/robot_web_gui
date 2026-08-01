@@ -72,6 +72,8 @@ function createViewerFallback() {
     fitToRobot: noOp,
     resetView: noOp,
     updateTargetPose: noOp,
+    setTransformMode: noOp,
+    getTransformMode: () => "translate",
     setLabMarkers: noOp,
     setLabTrajectories: noOp,
     clearLabVisualization: noOp,
@@ -926,6 +928,26 @@ viewer.callbacks.onTaskMove = (pose) => {
     setStatus("IK solve failed for dragged target.", "danger-text");
   }
 };
+
+const gizmoTranslateBtn = document.getElementById("gizmoTranslateBtn");
+const gizmoRotateBtn = document.getElementById("gizmoRotateBtn");
+
+function syncGizmoModeButtons(mode) {
+  gizmoTranslateBtn?.classList.toggle("active", mode === "translate");
+  gizmoRotateBtn?.classList.toggle("active", mode === "rotate");
+}
+
+if (!viewerInitFailure) {
+  viewer.callbacks.onTransformModeChange = syncGizmoModeButtons;
+  syncGizmoModeButtons(viewer.getTransformMode());
+
+  gizmoTranslateBtn?.addEventListener("click", () => {
+    viewer.setTransformMode("translate");
+  });
+  gizmoRotateBtn?.addEventListener("click", () => {
+    viewer.setTransformMode("rotate");
+  });
+}
 
 /* -------------------------------------------------------------------------- */
 /* Robot loading                                                               */
