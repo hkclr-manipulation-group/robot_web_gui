@@ -13,7 +13,7 @@ import traceback
 
 repo_path = os.path.dirname(os.path.dirname(__file__))
 parent_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-spark2_sdk_path = os.path.join(parent_path, "spark2_sdk", "spark2_python_dist")
+spark2_sdk_path = os.path.join(parent_path, "spark2_sdk_internal", "build", "install", "python")
 sys.path.insert(0, spark2_sdk_path)
 
 from spark2_sdk import (
