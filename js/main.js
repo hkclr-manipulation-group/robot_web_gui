@@ -74,6 +74,7 @@ function createViewerFallback() {
     updateTargetPose: noOp,
     setTransformMode: noOp,
     getTransformMode: () => "translate",
+    setTaskGizmoVisible: noOp,
     setLabMarkers: noOp,
     setLabTrajectories: noOp,
     clearLabVisualization: noOp,
@@ -911,7 +912,7 @@ taskUI.build();
 /* -------------------------------------------------------------------------- */
 
 viewer.callbacks.onTaskMove = (pose) => {
-  if (!kinematics || isSyncing) return;
+  if (!kinematics || isSyncing || !shouldShowTaskGizmo()) return;
 
   const targetPose = transformPoseToRobotPose(pose);
   if (!targetPose) return;
@@ -931,6 +932,23 @@ viewer.callbacks.onTaskMove = (pose) => {
 
 const gizmoTranslateBtn = document.getElementById("gizmoTranslateBtn");
 const gizmoRotateBtn = document.getElementById("gizmoRotateBtn");
+const gizmoModeBarEl = document.querySelector(".gizmo-mode-bar");
+
+function getActiveViewerTab() {
+  return document.querySelector(".tab-btn.active")?.dataset.page || "joint";
+}
+
+function shouldShowTaskGizmo() {
+  if (!VIEWER.hideTaskGizmoOnJointTeachInGateway) return true;
+  if (!isGatewayActive()) return true;
+  return getActiveViewerTab() === "task";
+}
+
+function syncTaskGizmoVisibility() {
+  const show = shouldShowTaskGizmo();
+  viewer.setTaskGizmoVisible(show);
+  gizmoModeBarEl?.toggleAttribute("hidden", !show);
+}
 
 function syncGizmoModeButtons(mode) {
   gizmoTranslateBtn?.classList.toggle("active", mode === "translate");
@@ -947,6 +965,8 @@ if (!viewerInitFailure) {
   gizmoRotateBtn?.addEventListener("click", () => {
     viewer.setTransformMode("rotate");
   });
+
+  syncTaskGizmoVisibility();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1262,6 +1282,7 @@ async function saveGateway() {
   );
 
   updateConnectionUi(url ? "ready" : "warn");
+  syncTaskGizmoVisibility();
 }
 
 async function connectSelectedRobot() {
@@ -1282,6 +1303,8 @@ async function connectSelectedRobot() {
     }else if (!result.data.success) {
       setStatus(`Failed to connect to robot. ${result.data.message}`, "danger-text");
     }
+
+    syncTaskGizmoVisibility();
 
   } catch (error) {
     updateConnectionUi("danger");
@@ -1453,6 +1476,8 @@ function bindButtons() {
       }else if (!result.data.success) {
         setStatus(`Failed to disconnect from hardware. ${result.data.message}`, "danger-text");
       }
+
+      syncTaskGizmoVisibility();
       
     } catch (error) {
       updateConnectionUi("danger");
@@ -1573,6 +1598,7 @@ function bindCardTabs() {
 
     const initialActiveTab = document.querySelector(".tab-btn.active");
     syncTeachVisibility(initialActiveTab?.dataset.page || "");
+    syncTaskGizmoVisibility();
 
     tabs.forEach((tab) => {
       tab.addEventListener("click", (e) => {
@@ -1593,6 +1619,7 @@ function bindCardTabs() {
         }
 
         syncTeachVisibility(pageId);
+        syncTaskGizmoVisibility();
       });
     });
   };

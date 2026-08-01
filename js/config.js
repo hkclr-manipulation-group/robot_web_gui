@@ -68,6 +68,11 @@ export const VIEWER = {
   showGhostRobot: true,
   /** RGB axes on the tip link (X red / Y green / Z blue). */
   showEndEffectorAxes: false,
+  /**
+   * When gateway URL is set, hide 3D task gizmo (TransformControls) on Joint / Teach tabs.
+   * Task tab keeps gizmo; preview mode (no gateway) always shows it.
+   */
+  hideTaskGizmoOnJointTeachInGateway: true,
 };
 
 /** Teach-mode timing (see `teach.js`). */

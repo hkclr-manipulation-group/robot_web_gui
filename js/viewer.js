@@ -244,6 +244,16 @@ export class RobotViewer {
 
   }
 
+  /** Show/hide task-space drag gizmo (TransformControls + target sphere). */
+  setTaskGizmoVisible(visible) {
+
+    const on = !!visible;
+    this.transform.enabled = on;
+    this.transform.visible = on;
+    if (this.target) this.target.visible = on;
+
+  }
+
   /* ---------------- Lights ---------------- */
 
   _initLights() {
