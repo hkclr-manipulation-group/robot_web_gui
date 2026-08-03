@@ -566,7 +566,7 @@ function applyTaskPoseByIK(pose, options = {}) {
 /* Jog / slider mode                                                           */
 /* -------------------------------------------------------------------------- */
 
-let sliderControlMode = SLIDER_CONTROL.mode;
+let sliderControlMode = "incremental";
 const jogCmdsJoint = [0, 0, 0, 0, 0, 0];
 const jogCmdsCartesian = [0, 0, 0, 0, 0, 0];
 const TASK_AXIS_INDEX = { x: 0, y: 1, z: 2, rx: 3, ry: 4, rz: 5 };
@@ -578,6 +578,11 @@ function jointNameToSdkIndex(name) {
   return names.length - 1 - uiIndex;
 }
 
+/** Preview: always incremental; gateway: read `SLIDER_CONTROL.mode`. */
+function effectiveSliderControlMode() {
+  return isGatewayActive() ? SLIDER_CONTROL.mode : "incremental";
+}
+
 function applySliderControlMode(mode) {
   const next = mode === "jog" ? "jog" : "incremental";
   if (sliderControlMode === next) return;
@@ -585,6 +590,10 @@ function applySliderControlMode(mode) {
   jointsUI?.setSliderMode(next);
   taskUI?.setSliderMode(next);
   console.log(`[slider] control mode: ${next}`);
+}
+
+function syncSliderControlMode() {
+  applySliderControlMode(effectiveSliderControlMode());
 }
 
 function jogRequestOptions() {
@@ -746,7 +755,7 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
 }, {
   intervalMs: 100,  // 连续调节的时间间隔（毫秒），可根据需要调整
   stepDeg: 1,       // 每次步进的角度，可根据需要调整
-  sliderMode: SLIDER_CONTROL.mode,
+  sliderMode: "incremental",
 });
 
 const kinematicsLab = kinematicsLabContainerEl
@@ -901,7 +910,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   stepTrans: 0.01,     // 平移每次步进的米数，可根据需要调整
   stepRot: 1,          // 旋转每次步进的角度，可根据需要调整
   controlMode: 0,      // 默认控制模式：1=绝对位姿, 0=增量位姿
-  sliderMode: SLIDER_CONTROL.mode,
+  sliderMode: "incremental",
   setStatus,
 });
 
@@ -1282,6 +1291,7 @@ async function saveGateway() {
   );
 
   updateConnectionUi(url ? "ready" : "warn");
+  syncSliderControlMode();
   syncTaskGizmoVisibility();
 }
 
@@ -1958,6 +1968,7 @@ function syncGripperFromStream(gripperPos) {
 
   gatewayUrlEl.value = savedGateway;
   setGatewayUrl(savedGateway);
+  syncSliderControlMode();
 
   updateConnectionUi(savedGateway ? "ready" : "warn");
 

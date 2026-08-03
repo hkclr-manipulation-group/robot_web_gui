@@ -81,7 +81,7 @@ export const TEACH = {
   recordSampleIntervalMs: 100,
 };
 
-/** Slider / jog control (joint and task space). Edit here; not read from config.yaml. */
+/** Slider / jog control (joint and task space). Used in gateway mode only; preview always uses incremental. */
 export const SLIDER_CONTROL = {
   mode: 'jog', // 'incremental' | 'jog'
   jogIntervalMs: 40,
