@@ -32,6 +32,7 @@ import {
 } from "./api.js";
 
 import { JointsUI } from "./joints-ui.js";
+import { JointsInputUI } from "./joints-input-ui.js";
 import { KinematicsLab } from "./kinematics-lab.js";
 import { RobotKinematics } from "./kinematics.js";
 import { planCartesianTrajectory, planJointTrajectory } from "./planner.js";
@@ -44,7 +45,7 @@ import {
   cloneMaterialsPerMesh,
   loadRobotFromUrdf,
 } from "./urdf-loader-wrapper.js";
-import { createStreamEulerStabilizer, formatEePoseValue, formatPoseText, sleep, quaternionToPose } from "./utils.js";
+import { createStreamEulerStabilizer, formatEePoseValue, formatJointInput, formatPoseText, sleep, quaternionToPose } from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import { initFullscreen } from "./fullscreen.js";
 import { copyEnvInfoToClipboard } from "./env-info.js";
@@ -101,6 +102,14 @@ const robotIdTextEl = document.getElementById("robotIdText");
 
 const jointCountEl = document.getElementById("jointCount");
 const jointContainerEl = document.getElementById("jointContainer");
+const jointJogPanelEl = document.getElementById("jointJogPanel");
+const jointInputPanelEl = document.getElementById("jointInputPanel");
+const jointInputListEl = document.getElementById("jointInputList");
+const moveJointsBtnEl = document.getElementById("moveJointsBtn");
+const saveInitialPoseBtnEl = document.getElementById("saveInitialPoseBtn");
+const saveInitialPoseIconEl = document.getElementById("saveInitialPoseIcon");
+const jointKeypadEl = document.getElementById("jointKeypad");
+const initialPoseBtnEl = document.getElementById("initialPoseBtn");
 const taskSpaceContainerEl = document.getElementById("taskSpaceContainer");
 const kinematicsLabContainerEl = document.getElementById("kinematicsLabPage");
 const jointContainerTeachEl = document.getElementById("jointContainerTeach");
@@ -319,6 +328,11 @@ function applyLocalJointMap(map) {
     noteGhostShowsCommandAheadOfTelemetry();
     syncTeachMirrorFromJointMap(map);
   });
+  // Keep Input fields in lockstep with slider / local joint changes.
+  jointsInputUI.seedFromRadians(map, { force: true });
+  if (jointPanelMode === "input") {
+    jointsInputUI.updateMatchState(getActualJointMap());
+  }
 }
 
 function vectorToMap(q) {
@@ -510,6 +524,10 @@ function applyJointVector(q, options = {}) {
       jointsUI.setValuesByMap(map, true);
       // Teach mirror follows the same joint values as Joint Space.
       syncTeachMirrorFromJointMap(map);
+      jointsInputUI.seedFromRadians(map, { force: true });
+      if (jointPanelMode === "input") {
+        jointsInputUI.updateMatchState(getActualJointMap());
+      }
     }
 
     noteGhostShowsCommandAheadOfTelemetry();
@@ -658,6 +676,10 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
           syncViewerFromRobot();
           noteGhostShowsCommandAheadOfTelemetry();
           syncTeachMirrorFromJointMap(currentMap);
+          jointsInputUI.seedFromRadians(currentMap, { force: true });
+          if (jointPanelMode === "input") {
+            jointsInputUI.updateMatchState(getActualJointMap());
+          }
         });
         if (!isHardwareControlActive()) {
           setStatus("Simulation: joint command sent to rt_control.", "ok");
@@ -769,6 +791,266 @@ const jointsUI = new JointsUI(jointContainerEl, jointCountEl, {
   stepDeg: 1,       // 每次步进的角度，可根据需要调整
   sliderMode: "incremental",
 });
+
+/** Joint sidebar: 'jog' (sliders) | 'input' (absolute + Move Joints). */
+let jointPanelMode = "jog";
+
+const jointsInputUI = new JointsInputUI({
+  listEl: jointInputListEl,
+  moveBtn: moveJointsBtnEl,
+  saveBtn: saveInitialPoseBtnEl,
+  saveIconEl: saveInitialPoseIconEl,
+  keypadEl: jointKeypadEl,
+  callbacks: {
+    onDraftChange: () => {
+      if (jointPanelMode === "input") {
+        jointsInputUI.updateMatchState(getActualJointMap());
+      }
+    },
+    onMoveRequest: () => {
+      handleMoveJoints();
+    },
+    onSaveRequest: () => {
+      handleSaveInitialPose();
+    },
+  },
+});
+
+function getActualJointMap() {
+  if (!kinematics) return {};
+  if (latestJointPosition?.length) {
+    return vectorToMap(latestJointPosition);
+  }
+  return kinematics.getCurrentJointMap();
+}
+
+function currentRobotStorageName() {
+  return getApiState().activeRobotName || DEFAULT_ROBOTS[0].name;
+}
+
+function initialPoseStorageKey(robotName = currentRobotStorageName()) {
+  return `${STORAGE_KEYS.initialPose}.${robotName}`;
+}
+
+function readSavedInitialPose(robotName = currentRobotStorageName()) {
+  try {
+    const raw = localStorage.getItem(initialPoseStorageKey(robotName));
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || data.version !== 1 || data.unit !== "rad") return null;
+    if (!Array.isArray(data.jointNames) || !Array.isArray(data.jointValues)) {
+      return null;
+    }
+    if (data.jointNames.length !== data.jointValues.length) return null;
+    if (!data.jointValues.every((v) => Number.isFinite(Number(v)))) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function savedInitialPoseMatchesRobot(data) {
+  if (!kinematics || !data) return false;
+  const names = kinematics.getJointNames();
+  if (names.length !== data.jointNames.length) return false;
+  return names.every((name, i) => name === data.jointNames[i]);
+}
+
+function formatSavedPoseStatus(jointNames, jointValuesRad) {
+  return jointNames
+    .map((name, i) => {
+      const deg = formatJointInput(jointValuesRad[i], false);
+      return `${name}=${deg}°`;
+    })
+    .join(" ");
+}
+
+function refreshInitialPoseButton() {
+  if (!initialPoseBtnEl) return;
+  const data = readSavedInitialPose();
+  const ok = !!(data && savedInitialPoseMatchesRobot(data));
+  initialPoseBtnEl.disabled = !ok;
+  initialPoseBtnEl.setAttribute("aria-disabled", ok ? "false" : "true");
+  initialPoseBtnEl.title = ok
+    ? "Go to saved initial position"
+    : "Save an initial pose first";
+}
+
+function setJointPanelMode(mode) {
+  const next = mode === "input" ? "input" : "jog";
+  jointPanelMode = next;
+
+  document.querySelectorAll(".joint-mode-tab").forEach((tab) => {
+    const active = tab.dataset.jointMode === next;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  if (jointJogPanelEl) {
+    jointJogPanelEl.hidden = next !== "jog";
+    jointJogPanelEl.classList.toggle("is-active", next === "jog");
+  }
+  if (jointInputPanelEl) {
+    jointInputPanelEl.hidden = next !== "input";
+    jointInputPanelEl.classList.toggle("is-active", next === "input");
+  }
+
+  if (next === "input") {
+    jointsInputUI.seedFromRadians(getActualJointMap(), { force: true });
+    jointsInputUI.updateMatchState(getActualJointMap());
+  }
+}
+
+function syncInputMatchFromActual() {
+  const actual = getActualJointMap();
+  // Always keep Input fields aligned with live joints (Jog drag / telemetry),
+  // unless the user is mid-edit on a Move draft (dirty).
+  jointsInputUI.syncFromRadians(actual);
+  if (jointPanelMode === "input") {
+    jointsInputUI.updateMatchState(actual);
+  }
+}
+
+function forceSyncInputFromActual() {
+  const actual = getActualJointMap();
+  jointsInputUI.seedFromRadians(actual, { force: true });
+  jointsInputUI.updateMatchState(actual);
+}
+
+async function dispatchAbsoluteJointMove(map, { statusOk, statusPreview }) {
+  if (!kinematics || !map) return false;
+
+  const jointNames = kinematics.getJointNames();
+  const jointValues = jointNames.map((name) => map[name] ?? 0);
+
+  if (isLocalPreviewOnly()) {
+    applyJointMap(map, {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
+    forceSyncInputFromActual();
+    setStatus(statusPreview, "warn");
+    return true;
+  }
+
+  try {
+    const result = await sendJointCommand(
+      jointNames,
+      jointValues,
+      rtInterpolationPayload(RT_INTERPOLATION.moveJoint)
+    );
+
+    if (result.mode === "preview") {
+      applyJointMap(map, {
+        syncJointUi: true,
+        syncTaskUi: true,
+        syncViewer: true,
+      });
+      forceSyncInputFromActual();
+      setStatus(statusPreview, "warn");
+      return true;
+    }
+
+    if (result.data && result.data.success) {
+      withSyncGuard(() => {
+        kinematics.setJointMap(map);
+        jointsUI.setValuesByMap(map, true);
+        refreshPoseReadout();
+        syncTaskUiFromRobot();
+        syncViewerFromRobot();
+        noteGhostShowsCommandAheadOfTelemetry();
+        syncTeachMirrorFromJointMap(map);
+      });
+      // Keep drafts aligned with the commanded pose; live telemetry continues syncing after.
+      jointsInputUI.seedFromRadians(map, { force: true });
+      jointsInputUI.updateMatchState(getActualJointMap());
+      setStatus(
+        isHardwareControlActive()
+          ? statusOk
+          : "Simulation: joint command sent to rt_control.",
+        "ok"
+      );
+      return true;
+    }
+
+    setStatus(
+      `Failed to move joints. ${result.data?.message || "Unknown error"}`,
+      "danger-text"
+    );
+    return false;
+  } catch (error) {
+    setStatus(`Error moving joints: ${error.message}`, "danger-text");
+    return false;
+  }
+}
+
+async function handleMoveJoints() {
+  if (!kinematics) return;
+  const result = jointsInputUI.validateForMove();
+  if (!result.ok) {
+    setStatus(result.message, "danger-text");
+    jointsInputUI.updateMatchState(getActualJointMap());
+    return;
+  }
+  await dispatchAbsoluteJointMove(result.map, {
+    statusOk: "Successfully sent joint command.",
+    statusPreview: "Local preview: joint angles applied (no gateway).",
+  });
+}
+
+function handleSaveInitialPose() {
+  if (!kinematics) return;
+  const actual = getActualJointMap();
+  if (!jointsInputUI.updateMatchState(actual)) {
+    setStatus(
+      "Save Initial Position requires draft angles to match the arm (±0.1°).",
+      "warn"
+    );
+    return;
+  }
+
+  const jointNames = kinematics.getJointNames();
+  const jointValues = jointNames.map((name) => actual[name] ?? 0);
+  const payload = {
+    version: 1,
+    unit: "rad",
+    jointNames,
+    jointValues,
+    updatedAt: new Date().toISOString(),
+  };
+
+  localStorage.setItem(
+    initialPoseStorageKey(),
+    JSON.stringify(payload)
+  );
+  refreshInitialPoseButton();
+  setStatus(
+    `Initial pose saved: ${formatSavedPoseStatus(jointNames, jointValues)}`,
+    "ok"
+  );
+}
+
+async function handleGoToInitialPose() {
+  if (!kinematics) return;
+  const data = readSavedInitialPose();
+  if (!data || !savedInitialPoseMatchesRobot(data)) {
+    refreshInitialPoseButton();
+    setStatus("No saved initial pose for this robot.", "warn");
+    return;
+  }
+
+  const map = {};
+  data.jointNames.forEach((name, i) => {
+    map[name] = Number(data.jointValues[i]);
+  });
+
+  viewer.fitToRobot?.();
+  await dispatchAbsoluteJointMove(map, {
+    statusOk: "Moved to saved initial position.",
+    statusPreview: "Local preview: initial pose applied (no gateway).",
+  });
+}
 
 const kinematicsLab = kinematicsLabContainerEl
   ? new KinematicsLab(kinematicsLabContainerEl, {
@@ -1237,6 +1519,12 @@ async function loadCurrentRobot(path) {
     kinematicsLab?.setRobotContext(kinematics);
 
     jointsUI.build(robotGhost);
+    jointsInputUI.build(robotGhost);
+    if (jointPanelMode === "input") {
+      jointsInputUI.seedFromRadians(getActualJointMap(), { force: true });
+      jointsInputUI.updateMatchState(getActualJointMap());
+    }
+    refreshInitialPoseButton();
     syncTeachMirrorFromJointMap(kinematics.getCurrentJointMap());
 
     syncMeta();
@@ -1283,6 +1571,7 @@ async function selectRobotAndLoadUrdf(robotName, { announce = true } = {}) {
   syncGripperCardForRobot(robot.name);
 
   if (activeRobotPath === path && robotGhost && robotHardware) {
+    refreshInitialPoseButton();
     if (announce) setStatus(`Active robot: ${robot.name}.`, "ok");
     return true;
   }
@@ -1460,6 +1749,12 @@ const teachSystem = teach.system;
 /* -------------------------------------------------------------------------- */
 
 function bindButtons() {
+  document.querySelectorAll(".joint-mode-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      setJointPanelMode(tab.dataset.jointMode);
+    });
+  });
+
   document.getElementById("homeBtn").onclick = async () => {
     if (!kinematics) return;
     viewer.fitToRobot();
@@ -1471,6 +1766,7 @@ function bindButtons() {
       syncTaskUi: true,
       syncViewer: true,
     });
+    forceSyncInputFromActual();
 
     if (isLocalPreviewOnly()) {
       setStatus("Local preview: home pose applied (no gateway).", "warn");
@@ -1495,6 +1791,12 @@ function bindButtons() {
       setStatus(`Failed to move to home position. ${result.data.message}`, "danger-text");
     }
   };
+
+  if (initialPoseBtnEl) {
+    initialPoseBtnEl.onclick = () => {
+      handleGoToInitialPose();
+    };
+  }
 
   document.getElementById("saveGatewayBtn").onclick = saveGateway;
 
@@ -1742,6 +2044,7 @@ function connectStream(url) {
           viewer.setHardwareRobotVisible(true);
         }
         refreshGhostVersusTelemetry(jointPosition);
+        syncInputMatchFromActual();
       }
 
       if (data.gripper_pos !== undefined && data.gripper_pos !== null) {
@@ -2007,6 +2310,8 @@ function syncGripperFromStream(gripperPos) {
   bindCardTabs();
   bindGripperControls();
   teach.refreshTeachControls();
+  setJointPanelMode("jog");
+  refreshInitialPoseButton();
 
   connectStream(savedGateway);
 

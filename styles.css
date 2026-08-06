@@ -69,6 +69,12 @@ button.icon-only:hover {
   border-radius: 12px;
   transform: none;
 }
+button.icon-only:disabled,
+button.icon-only[aria-disabled="true"] {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: not-allowed;
+}
 
 input[type="text"], input[type="number"], select, textarea, input[type="file"] {
   width: 100%;
@@ -867,6 +873,176 @@ body.is-pseudo-fullscreen .layout {
   padding-right: 4px;
 }
 
+/* Jog / Input mode switch */
+.joint-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.joint-mode-tab {
+  border: none;
+  background: transparent;
+  color: #9a9a9a;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: auto;
+  box-shadow: none;
+}
+.joint-mode-tab.is-active {
+  color: #1a1a1a;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+.joint-mode-tab:not(.is-active) {
+  background: #e8e8e8;
+  color: #9a9a9a;
+  border: none;
+}
+.joint-mode-tab:hover {
+  transform: none;
+  border: none;
+  border-color: transparent;
+}
+.joint-mode-panel[hidden] {
+  display: none !important;
+}
+.joint-mode-panel.is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.joint-input-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #efefef;
+  border-radius: 16px;
+  padding: 14px 12px;
+}
+.joint-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.joint-input-label {
+  flex: 0 0 auto;
+  min-width: 4.5em;
+  font-size: 15px;
+  font-weight: 600;
+  color: #222;
+}
+.joint-input-field {
+  flex: 1 1 auto;
+  max-width: 160px;
+  margin-left: auto;
+  padding: 8px 10px;
+  border: 1.5px solid #222;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.joint-input-field:focus {
+  outline: 2px solid rgba(255, 122, 56, 0.35);
+  outline-offset: 1px;
+}
+.joint-input-field.is-invalid {
+  border-color: #e85a5a;
+  background: #fff5f5;
+}
+
+.joint-input-actions {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.joint-input-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #e4e4e4;
+  color: #1a1a1a;
+  box-shadow: none;
+}
+.joint-input-btn:hover {
+  transform: none;
+  filter: brightness(0.97);
+  border: none;
+  border-color: transparent;
+}
+.joint-input-btn--primary {
+  background: #dcdcdc;
+}
+.joint-input-btn--save {
+  background: #ececec;
+  color: #1a1a1a;
+}
+.joint-input-btn--save.is-disabled,
+.joint-input-btn--save:disabled {
+  color: #c0c0c0;
+  background: #ececec;
+  cursor: not-allowed;
+  opacity: 1;
+}
+.joint-input-btn--save img {
+  width: 26px;
+  height: 23px;
+  flex: 0 0 auto;
+}
+
+.joint-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: #efefef;
+  border-radius: 16px;
+  padding: 12px;
+}
+.joint-keypad button {
+  min-height: 48px;
+  border: none;
+  border-radius: 12px;
+  background: #f7f7f7;
+  color: #1a1a1a;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+  padding: 8px;
+}
+.joint-keypad button:hover {
+  transform: none;
+  background: #fff;
+  border: none;
+  border-color: transparent;
+}
+.joint-keypad button:active {
+  background: #e8e8e8;
+}
+.joint-keypad-backspace {
+  grid-column: 1 / -1;
+  font-size: 18px;
+}
+
 /* TaskSpace container - same spacing as joint-list */
 #taskSpaceContainer {
   display: flex;
@@ -878,11 +1054,20 @@ body.is-pseudo-fullscreen .layout {
 }
 
 /* Make joint-list fill available vertical space and distribute height among cards */
+.tab-page.active .joint-mode-panel.is-active {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .tab-page.active .joint-list {
   flex: 1 1 auto;
   min-height: 0; /* important for flex children to allow shrinking */
   display: flex;
   flex-direction: column;
+}
+.tab-page.active .joint-input-list {
+  flex: 0 1 auto;
+  overflow: auto;
+  min-height: 0;
 }
 
 #jointContainerTeach.joint-list {

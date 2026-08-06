@@ -52,6 +52,9 @@
           <button id="homeBtn" title="Home" class="icon-only">
             <img src="./image/Group 116.svg" alt="Home" />
           </button>
+          <button id="initialPoseBtn" title="Save an initial pose first" class="icon-only" disabled aria-disabled="true">
+            <img src="./image/Group 230.svg" alt="Initial Position" />
+          </button>
           <!-- <button id="zeroBtn">Zero</button> -->
           <!-- <button id="stopBtn" class="danger">Stop</button> -->
         </div>
@@ -174,13 +177,43 @@
       <div id="tabPages">
         <section class="card tab-page active" data-page="joint">
           <div class="card-title-row sticky-title">
-            <!-- <h2>Joint Space</h2> -->
+            <div class="joint-mode-tabs" role="tablist" aria-label="Joint control mode">
+              <button type="button" class="joint-mode-tab is-active" data-joint-mode="jog" role="tab" aria-selected="true">Jog</button>
+              <button type="button" class="joint-mode-tab" data-joint-mode="input" role="tab" aria-selected="false">Input</button>
+            </div>
             <div class="row-actions">
               <button id="captureJointGoalBtn" style="display: none;">Capture Goal</button>
               <button id="refreshPoseBtn" style="display: none;">Refresh</button>
             </div>
           </div>
-          <div id="jointContainer" class="joint-list"></div>
+          <div id="jointJogPanel" class="joint-mode-panel is-active">
+            <div id="jointContainer" class="joint-list"></div>
+          </div>
+          <div id="jointInputPanel" class="joint-mode-panel" hidden>
+            <div id="jointInputList" class="joint-input-list"></div>
+            <div class="joint-input-actions">
+              <button type="button" id="moveJointsBtn" class="joint-input-btn joint-input-btn--primary">Move Joints</button>
+              <button type="button" id="saveInitialPoseBtn" class="joint-input-btn joint-input-btn--save is-disabled" disabled>
+                <img id="saveInitialPoseIcon" src="./image/Group 229.svg" alt="" width="26" height="23" />
+                <span>Save Initial Position</span>
+              </button>
+            </div>
+            <div id="jointKeypad" class="joint-keypad" aria-label="Numeric keypad">
+              <button type="button" data-key="1">1</button>
+              <button type="button" data-key="2">2</button>
+              <button type="button" data-key="3">3</button>
+              <button type="button" data-key="4">4</button>
+              <button type="button" data-key="5">5</button>
+              <button type="button" data-key="6">6</button>
+              <button type="button" data-key="7">7</button>
+              <button type="button" data-key="8">8</button>
+              <button type="button" data-key="9">9</button>
+              <button type="button" data-key="-">−</button>
+              <button type="button" data-key="0">0</button>
+              <button type="button" data-key=".">.</button>
+              <button type="button" data-key="backspace" class="joint-keypad-backspace" aria-label="Backspace">⌫</button>
+            </div>
+          </div>
         </section>
 
         <section class="card tab-page" data-page="task">
@@ -314,6 +347,6 @@
       });
     })();
   </script>
-  <script type="module" src="./js/main.js?v=20260730-teach"></script>
+  <script type="module" src="./js/main.js?v=20260806-joint-input"></script>
 </body>
 </html>

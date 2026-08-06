@@ -33,7 +33,15 @@ export const STORAGE_KEYS = {
   gatewayUrl: 'robot-web-gui.gatewayUrl',
   /** Persists selected robot `name` (URDF variant), not gateway `id`. */
   robotId: 'robot-web-gui.robotId',
+  /**
+   * Saved initial joint pose prefix; full key is `${initialPose}.${robotName}`.
+   * Value: { version, unit:'rad', jointNames, jointValues, updatedAt }.
+   */
+  initialPose: 'robot-web-gui.initialPose',
 };
+
+/** Draft vs actual joint match for Enable Save Initial Position (degrees). */
+export const INITIAL_POSE_MATCH_TOLERANCE_DEG = 0.1;
 
 export const CONTINUOUS_RANGE = { min: -Math.PI, max: Math.PI, step: 0.0025 };
 export const ROTARY_FALLBACK_RANGE = { min: -Math.PI, max: Math.PI, step: 0.0025 };
