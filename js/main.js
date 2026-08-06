@@ -74,6 +74,8 @@ function createViewerFallback() {
     updateTargetPose: noOp,
     setTransformMode: noOp,
     getTransformMode: () => "translate",
+    setTransformFrame: noOp,
+    getTransformFrame: () => "base",
     setTaskGizmoVisible: noOp,
     setLabMarkers: noOp,
     setLabTrajectories: noOp,
@@ -166,6 +168,12 @@ function setStatus(text, cls = "") {
   }
   statusEl.textContent = text;
   statusEl.className = `status-text ${cls}`.trim();
+}
+
+function clearStatusIf(text) {
+  if (statusEl?.textContent === text) {
+    setStatus("Ready.");
+  }
 }
 
 function withSyncGuard(fn) {
@@ -425,7 +433,7 @@ function updateConnectionUi(kind = "preview") {
 /* Sync: Robot -> UI                                                           */
 /* -------------------------------------------------------------------------- */
 
-function refreshPoseReadout() {
+function refreshPoseReadout({ syncViewer = true } = {}) {
 
   if (!kinematics) return;
 
@@ -437,7 +445,9 @@ function refreshPoseReadout() {
 
   updateEePoseCard([pose.x, pose.y, pose.z]);
 
-  viewer.updateTargetPose(pose);
+  if (syncViewer) {
+    viewer.updateTargetPose(pose);
+  }
 
 }
 
@@ -505,15 +515,13 @@ function applyJointVector(q, options = {}) {
     noteGhostShowsCommandAheadOfTelemetry();
 
     kinematics.setJointMap(map);
-    refreshPoseReadout();
+    refreshPoseReadout({ syncViewer });
 
     if (syncTaskUi) {
       syncTaskUiFromRobot();
     }
 
-    if (syncViewer) {
-      syncViewerFromRobot();
-    }
+    if (syncViewer) syncViewerFromRobot();
   });
 
   return true;
@@ -536,15 +544,19 @@ function applyTaskPoseByIK(pose, options = {}) {
     syncTaskUi = true,
     syncViewer = true,
     setAsLastGoal = false,
+    ikOptions = {},
   } = options;
 
   ikBusy = true;
 
   try {
     const q0 = kinematics.getCurrentJointVector();
-    const result = kinematics.solveIK(pose, q0);
+    const result = kinematics.solveIK(pose, q0, ikOptions);
 
-    if (!result || !result.q) return false;
+    if (!result?.success || !result.q) {
+      kinematics.setJointVector(q0);
+      return false;
+    }
 
     applyJointVector(result.q, {
       syncJointUi,
@@ -923,6 +935,7 @@ taskUI.build();
 viewer.callbacks.onTaskMove = (pose) => {
   if (!kinematics || isSyncing || !shouldShowTaskGizmo()) return;
 
+  const ikFailStatus = "IK solve failed for dragged target.";
   const targetPose = transformPoseToRobotPose(pose);
   if (!targetPose) return;
 
@@ -930,17 +943,26 @@ viewer.callbacks.onTaskMove = (pose) => {
 
   const ok = applyTaskPoseByIK(targetPose, {
     syncJointUi: true,
-    syncTaskUi: true,
+    syncTaskUi: pose?.mode !== "rotate",
     syncViewer: false, // viewer 自己已经在这个 pose 上了
+    ikOptions: pose?.mode === "rotate"
+      ? { maxIterations: 140, positionTolerance: 5e-4, orientationTolerance: 8e-3 }
+      : {},
   });
 
   if (!ok) {
-    setStatus("IK solve failed for dragged target.", "danger-text");
+    syncTaskUiFromRobot();
+    syncViewerFromRobot();
+    setStatus(ikFailStatus, "danger-text");
+    return;
   }
+
+  clearStatusIf(ikFailStatus);
 };
 
 const gizmoTranslateBtn = document.getElementById("gizmoTranslateBtn");
 const gizmoRotateBtn = document.getElementById("gizmoRotateBtn");
+const gizmoFrameSelectEl = document.getElementById("gizmoFrameSelect");
 const gizmoModeBarEl = document.querySelector(".gizmo-mode-bar");
 
 function getActiveViewerTab() {
@@ -964,15 +986,24 @@ function syncGizmoModeButtons(mode) {
   gizmoRotateBtn?.classList.toggle("active", mode === "rotate");
 }
 
+function syncGizmoFrameSelect(frame) {
+  if (gizmoFrameSelectEl) gizmoFrameSelectEl.value = frame;
+}
+
 if (!viewerInitFailure) {
   viewer.callbacks.onTransformModeChange = syncGizmoModeButtons;
+  viewer.callbacks.onTransformFrameChange = syncGizmoFrameSelect;
   syncGizmoModeButtons(viewer.getTransformMode());
+  syncGizmoFrameSelect(viewer.getTransformFrame());
 
   gizmoTranslateBtn?.addEventListener("click", () => {
     viewer.setTransformMode("translate");
   });
   gizmoRotateBtn?.addEventListener("click", () => {
     viewer.setTransformMode("rotate");
+  });
+  gizmoFrameSelectEl?.addEventListener("change", () => {
+    viewer.setTransformFrame(gizmoFrameSelectEl.value);
   });
 
   syncTaskGizmoVisibility();

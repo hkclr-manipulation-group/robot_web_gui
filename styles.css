@@ -523,6 +523,7 @@ body.is-pseudo-fullscreen .layout {
 
 .gizmo-mode-bar {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   gap: 6px;
   width: 100%;
@@ -532,6 +533,13 @@ body.is-pseudo-fullscreen .layout {
   border: 1px solid var(--line-soft);
   border-radius: 14px;
   box-shadow: 0 6px 18px rgba(19, 33, 62, 0.08);
+}
+
+.gizmo-mode-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
 }
 
 .gizmo-mode-btn {
@@ -558,6 +566,26 @@ body.is-pseudo-fullscreen .layout {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.gizmo-frame-select {
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.gizmo-frame-select:focus {
+  outline: 2px solid rgba(47, 128, 237, 0.28);
+  outline-offset: 1px;
 }
 
 .ee-pose-card {
@@ -1776,11 +1804,22 @@ body.is-pseudo-fullscreen .layout {
     border-radius: 10px;
   }
 
+  .gizmo-mode-buttons {
+    gap: 4px;
+  }
+
   .gizmo-mode-btn {
     min-width: 52px;
     padding: 6px 8px;
     font-size: 11px;
     border-radius: 8px;
+  }
+
+  .gizmo-frame-select {
+    min-height: 27px;
+    padding: 5px 24px 5px 8px;
+    border-radius: 8px;
+    font-size: 11px;
   }
 
   .ee-pose-title,

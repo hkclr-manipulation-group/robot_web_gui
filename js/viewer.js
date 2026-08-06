@@ -24,6 +24,10 @@ export class RobotViewer {
     this._dragging = false;
     /** @type {'translate' | 'rotate'} */
     this._transformMode = "translate";
+    /** @type {'base' | 'task'} */
+    this._transformFrame = "base";
+    /** @type {THREE.Vector3 | null} */
+    this._dragStartPosition = null;
     this._viewWidth = 0;
     this._viewHeight = 0;
     this._resizeRaf = 0;
@@ -133,8 +137,15 @@ export class RobotViewer {
     this.transform.addEventListener("dragging-changed", (e) => {
 
       this._dragging = e.value;
+      if (e.value) this.#captureTransformDragStart();
 
       this.orbit.enabled = !e.value;
+
+    });
+
+    this.transform.addEventListener("mouseDown", () => {
+
+      this.#captureTransformDragStart();
 
     });
 
@@ -155,6 +166,7 @@ export class RobotViewer {
     this.transform.addEventListener("mouseUp", () => {
 
       this._emitTargetPose();
+      this._dragStartPosition = null;
 
     });
 
@@ -231,8 +243,7 @@ export class RobotViewer {
 
     this._transformMode = mode;
     this.transform.setMode(mode);
-    // Translate in world (base-aligned); rotate in local (EE-aligned).
-    this.transform.setSpace(mode === "translate" ? "world" : "local");
+    this.#syncTransformSpace();
     this.callbacks?.onTransformModeChange?.(mode);
 
   }
@@ -241,6 +252,47 @@ export class RobotViewer {
   getTransformMode() {
 
     return this._transformMode;
+
+  }
+
+  /**
+   * @param {'base' | 'task'} frame
+   */
+  setTransformFrame(frame) {
+
+    if (frame !== "base" && frame !== "task") return;
+
+    this._transformFrame = frame;
+    this.#syncTransformSpace();
+    this.callbacks?.onTransformFrameChange?.(frame);
+
+  }
+
+  /** @returns {'base' | 'task'} */
+  getTransformFrame() {
+
+    return this._transformFrame;
+
+  }
+
+  #syncTransformSpace() {
+
+    this.transform.setSpace(this._transformFrame === "base" ? "world" : "local");
+
+  }
+
+  #captureTransformDragStart() {
+
+    if (!this.target) return;
+    this._dragStartPosition = this.target.position.clone();
+
+  }
+
+  #applyTransformDragConstraints() {
+
+    if (this._transformMode !== "rotate" || !this._dragStartPosition) return;
+    this.target.position.copy(this._dragStartPosition);
+    this.target.updateMatrixWorld(true);
 
   }
 
@@ -495,10 +547,14 @@ export class RobotViewer {
 
     if (!this.callbacks?.onTaskMove) return;
 
+    this.#applyTransformDragConstraints();
+
     const pose = {
 
       position: this.target.position.clone(),
       quaternion: this.target.quaternion.clone(),
+      mode: this._transformMode,
+      frame: this._transformFrame,
 
     };
 

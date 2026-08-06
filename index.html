@@ -109,8 +109,14 @@
           </div>
         </div>
         <div class="gizmo-mode-bar" aria-label="Gizmo mode">
-          <button id="gizmoTranslateBtn" class="gizmo-mode-btn active" type="button" title="Translate (T)">Translate</button>
-          <button id="gizmoRotateBtn" class="gizmo-mode-btn" type="button" title="Rotate (R)">Rotate</button>
+          <div class="gizmo-mode-buttons">
+            <button id="gizmoTranslateBtn" class="gizmo-mode-btn active" type="button" title="Translate (T)">Translate</button>
+            <button id="gizmoRotateBtn" class="gizmo-mode-btn" type="button" title="Rotate (R)">Rotate</button>
+          </div>
+          <select id="gizmoFrameSelect" class="gizmo-frame-select" title="Gizmo frame" aria-label="Gizmo frame">
+            <option value="base">Base frame</option>
+            <option value="task">Task frame</option>
+          </select>
         </div>
       </div>
 
