@@ -40,9 +40,9 @@ export const ROTARY_FALLBACK_RANGE = { min: -Math.PI, max: Math.PI, step: 0.0025
 export const PRISMATIC_FALLBACK_RANGE = { min: -0.2, max: 0.2, step: 0.0005 };
 
 export const TASK_LIMITS = {
-  x: { min: -1.2, max: 1.2, step: 0.001 },
-  y: { min: -1.2, max: 1.2, step: 0.001 },
-  z: { min: -0.2, max: 1.8, step: 0.001 },
+  x: { min: -0.8, max: 0.8, step: 0.001 },
+  y: { min: -0.8, max: 0.8, step: 0.001 },
+  z: { min: 0.2, max: 0.8, step: 0.001 },
   rx: { min: -180, max: 180, step: 0.5 },
   ry: { min: -180, max: 180, step: 0.5 },
   rz: { min: -180, max: 180, step: 0.5 },

@@ -124,6 +124,7 @@ export class JointsUI {
 
     // 更新数值显示
     ui.value.textContent = formatJointValue(value, false);
+    ui.baseValue = value; 
 
     // 更新进度条：映射到实际关节限位范围
     const card = ui.slider.closest(".joint-card");
