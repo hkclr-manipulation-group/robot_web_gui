@@ -1010,7 +1010,9 @@ body.is-pseudo-fullscreen .layout {
 }
 
 .joint-keypad {
-  display: grid;
+  /* TEMP: hidden for layout testing — restore display: grid when done */
+  display: none;
+  grid-template-columns: repeat(3, 1fr);
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   background: #efefef;
