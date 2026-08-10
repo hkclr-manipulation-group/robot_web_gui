@@ -959,7 +959,8 @@ function setJointPanelMode(mode) {
   const next = mode === "input" ? "input" : "jog";
   jointPanelMode = next;
 
-  document.querySelectorAll(".joint-mode-tab").forEach((tab) => {
+  // Only Joint tabs ([data-joint-mode]); Task tabs share .joint-mode-tab class.
+  document.querySelectorAll("[data-joint-mode]").forEach((tab) => {
     const active = tab.dataset.jointMode === next;
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-selected", active ? "true" : "false");
