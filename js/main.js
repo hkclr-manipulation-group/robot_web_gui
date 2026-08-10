@@ -951,7 +951,7 @@ function refreshInitialPoseButton() {
   initialPoseBtnEl.disabled = !ok;
   initialPoseBtnEl.setAttribute("aria-disabled", ok ? "false" : "true");
   initialPoseBtnEl.title = ok
-    ? "Go to saved initial position"
+    ? "Go to initial position"
     : "Save an initial pose first";
 }
 
@@ -1130,7 +1130,7 @@ async function handleGoToInitialPose() {
 
   viewer.fitToRobot?.();
   await dispatchAbsoluteJointMove(map, {
-    statusOk: "Moved to saved initial position.",
+    statusOk: "Moved to initial position.",
     statusPreview: "Local preview: initial pose applied (no gateway).",
   });
 }
