@@ -25,7 +25,7 @@ export class RobotViewer {
     /** @type {'translate' | 'rotate'} */
     this._transformMode = "translate";
     /** @type {'base' | 'task'} */
-    this._transformFrame = "base";
+    this._transformFrame = "task";
     /** @type {THREE.Vector3 | null} */
     this._dragStartPosition = null;
     this._viewWidth = 0;
@@ -129,6 +129,7 @@ export class RobotViewer {
       this.camera,
       this.renderer.domElement
     );
+    this.#syncTransformSpace();
 
     this.scene.add(this.transform);
 
