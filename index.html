@@ -218,13 +218,39 @@
 
         <section class="card tab-page" data-page="task">
           <div class="card-title-row sticky-title">
-            <!-- <h2>Task Space</h2> -->
+            <div class="joint-mode-tabs" role="tablist" aria-label="Task control mode">
+              <button type="button" class="joint-mode-tab is-active" data-task-mode="jog" role="tab" aria-selected="true">Jog</button>
+              <button type="button" class="joint-mode-tab" data-task-mode="input" role="tab" aria-selected="false">Input</button>
+            </div>
             <div class="row-actions">
               <button id="readCurrentPoseBtn" style="display: none;">Read Current</button>
               <button id="capturePoseGoalBtn" style="display: none;">Capture Goal</button>
             </div>
           </div>
-          <div id="taskSpaceContainer"></div>
+          <div id="taskJogPanel" class="joint-mode-panel is-active">
+            <div id="taskSpaceContainer"></div>
+          </div>
+          <div id="taskInputPanel" class="joint-mode-panel" hidden>
+            <div id="taskInputList" class="joint-input-list"></div>
+            <div class="joint-input-actions">
+              <button type="button" id="movePoseBtn" class="joint-input-btn joint-input-btn--primary">Move Pose</button>
+            </div>
+            <div id="taskKeypad" class="joint-keypad" aria-label="Numeric keypad">
+              <button type="button" data-key="1">1</button>
+              <button type="button" data-key="2">2</button>
+              <button type="button" data-key="3">3</button>
+              <button type="button" data-key="4">4</button>
+              <button type="button" data-key="5">5</button>
+              <button type="button" data-key="6">6</button>
+              <button type="button" data-key="7">7</button>
+              <button type="button" data-key="8">8</button>
+              <button type="button" data-key="9">9</button>
+              <button type="button" data-key="-">−</button>
+              <button type="button" data-key="0">0</button>
+              <button type="button" data-key=".">.</button>
+              <button type="button" data-key="backspace" class="joint-keypad-backspace" aria-label="Backspace">⌫</button>
+            </div>
+          </div>
         </section>
 
         <section class="card tab-page" data-page="planning">
@@ -347,6 +373,6 @@
       });
     })();
   </script>
-  <script type="module" src="./js/main.js?v=20260806-joint-input"></script>
+  <script type="module" src="./js/main.js?v=20260807-task-input-force-sync"></script>
 </body>
 </html>

@@ -1,7 +1,9 @@
 import {
+  CONTINUOUS_RANGE,
   DEFAULT_ROBOTS,
   GRIPPER,
   PATH_DEFAULTS,
+  ROTARY_FALLBACK_RANGE,
   RT_INTERPOLATION,
   SLIDER_CONTROL,
   STORAGE_KEYS,
@@ -33,6 +35,7 @@ import {
 
 import { JointsUI } from "./joints-ui.js";
 import { JointsInputUI } from "./joints-input-ui.js";
+import { TaskInputUI } from "./task-input-ui.js";
 import { KinematicsLab } from "./kinematics-lab.js";
 import { RobotKinematics } from "./kinematics.js";
 import { planCartesianTrajectory, planJointTrajectory } from "./planner.js";
@@ -111,6 +114,11 @@ const saveInitialPoseIconEl = document.getElementById("saveInitialPoseIcon");
 const jointKeypadEl = document.getElementById("jointKeypad");
 const initialPoseBtnEl = document.getElementById("initialPoseBtn");
 const taskSpaceContainerEl = document.getElementById("taskSpaceContainer");
+const taskJogPanelEl = document.getElementById("taskJogPanel");
+const taskInputPanelEl = document.getElementById("taskInputPanel");
+const taskInputListEl = document.getElementById("taskInputList");
+const movePoseBtnEl = document.getElementById("movePoseBtn");
+const taskKeypadEl = document.getElementById("taskKeypad");
 const kinematicsLabContainerEl = document.getElementById("kinematicsLabPage");
 const jointContainerTeachEl = document.getElementById("jointContainerTeach");
 const teachRecordBtnEl = document.getElementById("teachRecordBtn");
@@ -474,7 +482,9 @@ function syncViewerFromRobot() {
 function syncTaskUiFromRobot() {
   if (!kinematics) return;
   const pose = kinematics.getEndEffectorPose();
-  taskUI.setPose(poseRadToUiDeg(pose));
+  const uiPose = poseRadToUiDeg(pose);
+  taskUI.setPose(uiPose);
+  syncTaskInputFromPose(uiPose, { force: false });
 }
 
 function syncViewerFromStreamData(position, quaternion) {
@@ -494,7 +504,9 @@ function syncMeta() {
   if (!pose) return;
 
   refreshPoseReadout();
-  taskUI.setPose(poseRadToUiDeg(pose));
+  const uiPose = poseRadToUiDeg(pose);
+  taskUI.setPose(uiPose);
+  syncTaskInputFromPose(uiPose, { force: false });
 
 }
 
@@ -587,6 +599,73 @@ function applyTaskPoseByIK(pose, options = {}) {
     }
 
     return true;
+  } finally {
+    ikBusy = false;
+  }
+}
+
+/** URDF joint limits for a named revolute joint (rad). Continuous joints are unbounded here. */
+function getUrdfJointLimitRad(name) {
+  const joint = kinematics?.robot?.joints?.[name];
+  if (!joint) return { ...ROTARY_FALLBACK_RANGE, continuous: false };
+  if (joint.jointType === "continuous") {
+    return { ...CONTINUOUS_RANGE, continuous: true };
+  }
+  let min = ROTARY_FALLBACK_RANGE.min;
+  let max = ROTARY_FALLBACK_RANGE.max;
+  if (joint.limit) {
+    if (Number.isFinite(joint.limit.lower)) min = joint.limit.lower;
+    if (Number.isFinite(joint.limit.upper)) max = joint.limit.upper;
+  }
+  return { min, max, continuous: false };
+}
+
+/**
+ * @param {number[]} q joint vector in kinematics order (base→tip)
+ * @returns {{ ok: true } | { ok: false, joint: string, value: number, min: number, max: number }}
+ */
+function jointVectorWithinUrdfLimits(q) {
+  if (!kinematics || !q?.length) {
+    return { ok: false, joint: "?", value: NaN, min: 0, max: 0 };
+  }
+  const names = kinematics.getJointNames();
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    const { min, max, continuous } = getUrdfJointLimitRad(name);
+    if (continuous) continue;
+    const v = q[i];
+    if (!Number.isFinite(v) || v < min || v > max) {
+      return { ok: false, joint: name, value: v, min, max };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Solve IK for an absolute EE pose without committing UI/motion on failure.
+ * On limit failure, restores the seed configuration.
+ * @returns {{ ok: true, q: number[] } | { ok: false, reason: 'ik' | 'limits' | 'busy', detail?: object }}
+ */
+function solveTaskPoseIkChecked(pose, ikOptions = {}) {
+  if (!kinematics || !pose) return { ok: false, reason: "ik" };
+  if (ikBusy) return { ok: false, reason: "busy" };
+
+  ikBusy = true;
+  const q0 = kinematics.getCurrentJointVector();
+  try {
+    const result = kinematics.solveIK(pose, q0, ikOptions);
+    if (!result?.success || !result.q) {
+      kinematics.setJointVector(q0);
+      return { ok: false, reason: "ik" };
+    }
+
+    const lim = jointVectorWithinUrdfLimits(result.q);
+    if (!lim.ok) {
+      kinematics.setJointVector(q0);
+      return { ok: false, reason: "limits", detail: lim };
+    }
+
+    return { ok: true, q: result.q };
   } finally {
     ikBusy = false;
   }
@@ -930,6 +1009,7 @@ async function dispatchAbsoluteJointMove(map, { statusOk, statusPreview }) {
       syncViewer: true,
     });
     forceSyncInputFromActual();
+    forceSyncTaskInputFromActual();
     setStatus(statusPreview, "warn");
     return true;
   }
@@ -948,6 +1028,7 @@ async function dispatchAbsoluteJointMove(map, { statusOk, statusPreview }) {
         syncViewer: true,
       });
       forceSyncInputFromActual();
+      forceSyncTaskInputFromActual();
       setStatus(statusPreview, "warn");
       return true;
     }
@@ -965,6 +1046,7 @@ async function dispatchAbsoluteJointMove(map, { statusOk, statusPreview }) {
       // Keep drafts aligned with the commanded pose; live telemetry continues syncing after.
       jointsInputUI.seedFromRadians(map, { force: true });
       jointsInputUI.updateMatchState(getActualJointMap());
+      forceSyncTaskInputFromActual();
       setStatus(
         isHardwareControlActive()
           ? statusOk
@@ -1062,7 +1144,9 @@ const kinematicsLab = kinematicsLabContainerEl
 const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onReadCurrent: () => {
     if (!kinematics) return;
-    taskUI.setPose(poseRadToUiDeg(kinematics.getEndEffectorPose()));
+    const uiPose = poseRadToUiDeg(kinematics.getEndEffectorPose());
+    taskUI.setPose(uiPose);
+    syncTaskInputFromPose(uiPose, { force: true });
   },
 
   onMove: async (pose) => {
@@ -1080,6 +1164,8 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
       setStatus("IK solve failed for task move.", "danger-text");
       return;
     }
+
+    syncTaskInputFromPose(poseRadToUiDeg(targetPose), { force: true });
 
     if (isLocalPreviewOnly()) {
       setStatus("Local preview: task-space move applied (no gateway).", "warn");
@@ -1136,6 +1222,9 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
       setStatus("IK solve failed for task jog.", "danger-text");
       return;
     }
+
+    // Jog drag: keep Input fields following the absolute pose (when not dirty).
+    syncTaskInputFromPose(taskUI.getPose(), { force: true });
 
     if (isLocalPreviewOnly()) {
       setStatus("Local preview: task jog applied (no gateway).", "warn");
@@ -1208,6 +1297,138 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   setStatus,
 });
 
+/** Task sidebar: 'jog' (sliders) | 'input' (absolute Move Pose). */
+let taskPanelMode = "jog";
+
+const taskInputUI = new TaskInputUI({
+  listEl: taskInputListEl,
+  moveBtn: movePoseBtnEl,
+  keypadEl: taskKeypadEl,
+  callbacks: {
+    onMoveRequest: () => {
+      handleMovePose();
+    },
+  },
+});
+taskInputUI.build();
+
+function getActualTaskPoseUi() {
+  if (!kinematics) return null;
+  return poseRadToUiDeg(kinematics.getEndEffectorPose());
+}
+
+function syncTaskInputFromPose(poseUi, { force = false } = {}) {
+  if (!poseUi || !taskInputUI) return;
+  if (force) {
+    taskInputUI.seedFromPose(poseUi, { force: true });
+  } else {
+    taskInputUI.syncFromPose(poseUi);
+  }
+}
+
+function forceSyncTaskInputFromActual() {
+  const pose = getActualTaskPoseUi();
+  if (pose) syncTaskInputFromPose(pose, { force: true });
+}
+
+function setTaskPanelMode(mode) {
+  const next = mode === "input" ? "input" : "jog";
+  taskPanelMode = next;
+
+  document.querySelectorAll("[data-task-mode]").forEach((tab) => {
+    const active = tab.dataset.taskMode === next;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  if (taskJogPanelEl) {
+    taskJogPanelEl.hidden = next !== "jog";
+    taskJogPanelEl.classList.toggle("is-active", next === "jog");
+  }
+  if (taskInputPanelEl) {
+    taskInputPanelEl.hidden = next !== "input";
+    taskInputPanelEl.classList.toggle("is-active", next === "input");
+  }
+
+  if (next === "input") {
+    forceSyncTaskInputFromActual();
+  }
+}
+
+async function handleMovePose() {
+  if (!kinematics) return;
+  const result = taskInputUI.validateForMove();
+  if (!result.ok) {
+    setStatus(result.message, "danger-text");
+    return;
+  }
+
+  const targetPose = poseUiDegToRad(result.pose);
+  const solved = solveTaskPoseIkChecked(targetPose);
+
+  if (!solved.ok) {
+    // Restore display after failed IK / limit check (robot already reset to q0).
+    applyJointVector(kinematics.getCurrentJointVector(), {
+      syncJointUi: true,
+      syncTaskUi: true,
+      syncViewer: true,
+    });
+    // Clear dirty draft so fields match the restored actual pose.
+    forceSyncTaskInputFromActual();
+    if (solved.reason === "limits") {
+      const d = solved.detail;
+      const deg = (r) => ((r * 180) / Math.PI).toFixed(1);
+      setStatus(
+        `IK solution exceeds joint limits (${d.joint}: ${deg(d.value)}° not in [${deg(d.min)}°, ${deg(d.max)}°]).`,
+        "danger-text"
+      );
+    } else if (solved.reason === "busy") {
+      setStatus("IK solver busy, try again.", "warn");
+    } else {
+      setStatus("IK solve failed for task move.", "danger-text");
+    }
+    return;
+  }
+
+  applyJointVector(solved.q, {
+    syncJointUi: true,
+    syncTaskUi: true,
+    syncViewer: true,
+  });
+  lastGoalPose = targetPose;
+  noteGhostShowsCommandAheadOfTelemetry();
+
+  // Keep Input fields on the commanded absolute pose (base frame).
+  taskInputUI.seedFromPose(result.pose, { force: true });
+
+  if (isLocalPreviewOnly()) {
+    setStatus("Local preview: task-space move applied (no gateway).", "warn");
+    return;
+  }
+
+  try {
+    // Gateway: move_ee_point via /move_pose (only after IK + joint-limit gate).
+    const cmdResult = await sendPoseCommand(poseToArray(targetPose));
+    if (cmdResult.mode === "preview") {
+      setStatus("Preview task-space move applied locally.", "warn");
+    } else if (cmdResult.data && cmdResult.data.success) {
+      setStatus(
+        isHardwareControlActive()
+          ? "Task-space move point command sent."
+          : "Simulation: task-space move point sent to rt_control.",
+        "ok"
+      );
+    } else if (cmdResult.data && !cmdResult.data.success) {
+      setStatus(
+        `Failed to send move point command. ${cmdResult.data.message}`,
+        "danger-text"
+      );
+    }
+  } catch (error) {
+    setStatus(`Error sending move point command: ${error.message}`, "danger-text");
+  }
+}
+
 taskUI.build();
 
 /* -------------------------------------------------------------------------- */
@@ -1222,6 +1443,7 @@ viewer.callbacks.onTaskMove = (pose) => {
   if (!targetPose) return;
 
   taskUI.setPose(poseRadToUiDeg(targetPose));
+  syncTaskInputFromPose(poseRadToUiDeg(targetPose), { force: true });
 
   const ok = applyTaskPoseByIK(targetPose, {
     syncJointUi: true,
@@ -1749,9 +1971,15 @@ const teachSystem = teach.system;
 /* -------------------------------------------------------------------------- */
 
 function bindButtons() {
-  document.querySelectorAll(".joint-mode-tab").forEach((tab) => {
+  document.querySelectorAll("[data-joint-mode]").forEach((tab) => {
     tab.addEventListener("click", () => {
       setJointPanelMode(tab.dataset.jointMode);
+    });
+  });
+
+  document.querySelectorAll("[data-task-mode]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      setTaskPanelMode(tab.dataset.taskMode);
     });
   });
 
@@ -1767,6 +1995,7 @@ function bindButtons() {
       syncViewer: true,
     });
     forceSyncInputFromActual();
+    forceSyncTaskInputFromActual();
 
     if (isLocalPreviewOnly()) {
       setStatus("Local preview: home pose applied (no gateway).", "warn");
@@ -2034,6 +2263,7 @@ function connectStream(url) {
         if (eePose.length >= 6 && kinematics) {
           const pose = streamEulerStabilizer.taskPoseDegFromStream(eePose);
           taskUI.syncFromStreamData(pose);
+          syncTaskInputFromPose(pose, { force: false });
         }
       }
 
@@ -2311,6 +2541,7 @@ function syncGripperFromStream(gripperPos) {
   bindGripperControls();
   teach.refreshTeachControls();
   setJointPanelMode("jog");
+  setTaskPanelMode("jog");
   refreshInitialPoseButton();
 
   connectStream(savedGateway);

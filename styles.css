@@ -1098,6 +1098,10 @@ body.is-pseudo-fullscreen .layout {
   flex-direction: column;
 }
 
+#taskInputPanel .joint-input-actions .joint-input-btn--primary {
+  flex: 1 1 auto;
+}
+
 .joint-card {
   /* Let cards grow/shrink to share the parent's height; keep a reasonable min-height */
   flex: 1 1 0;
