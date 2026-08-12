@@ -1162,6 +1162,7 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     });
 
     if (!ok) {
+      syncTaskUiFromRobot();
       setStatus("IK solve failed for task move.", "danger-text");
       return;
     }
@@ -1220,6 +1221,8 @@ const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
     });
 
     if (!ok) {
+      // Slider UI advances before IK; roll back so readout matches the reachable EE pose.
+      syncTaskUiFromRobot();
       setStatus("IK solve failed for task jog.", "danger-text");
       return;
     }
