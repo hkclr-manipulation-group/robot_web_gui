@@ -51,9 +51,9 @@ export const TASK_LIMITS = {
   x: { min: -0.8, max: 0.8, step: 0.001 },
   y: { min: -0.8, max: 0.8, step: 0.001 },
   z: { min: 0.2, max: 0.8, step: 0.001 },
-  rx: { min: -180, max: 180, step: 0.5 },
-  ry: { min: -180, max: 180, step: 0.5 },
-  rz: { min: -180, max: 180, step: 0.5 },
+  rx: { min: -360, max: 360, step: 0.5 },
+  ry: { min: -360, max: 360, step: 0.5 },
+  rz: { min: -360, max: 360, step: 0.5 },
 };
 
 export const IK_DEFAULTS = {

@@ -48,7 +48,15 @@ import {
   cloneMaterialsPerMesh,
   loadRobotFromUrdf,
 } from "./urdf-loader-wrapper.js";
-import { createStreamEulerStabilizer, formatEePoseValue, formatJointInput, formatPoseText, sleep, quaternionToPose } from "./utils.js";
+import {
+  createStreamEulerStabilizer,
+  formatEePoseValue,
+  formatJointInput,
+  formatPoseText,
+  sleep,
+  quaternionToPose,
+  unwrapEulerDeg,
+} from "./utils.js";
 import { RobotViewer } from "./viewer.js";
 import { initFullscreen } from "./fullscreen.js";
 import { copyEnvInfoToClipboard } from "./env-info.js";
@@ -377,9 +385,14 @@ function getCurrentPose() {
   return kinematics.getEndEffectorPose();
 }
 
-function poseRadToUiDeg(pose) {
+/**
+ * Convert kinematics pose (rad) to Task UI units (m / deg).
+ * When `referenceUiPose` is set, unwrap Euler so ±180 principal values
+ * stay continuous with the slider (e.g. 270° vs -90°).
+ */
+function poseRadToUiDeg(pose, referenceUiPose = null) {
   if (!pose) return null;
-  return {
+  const uiPose = {
     x: pose.x,
     y: pose.y,
     z: pose.z,
@@ -387,6 +400,9 @@ function poseRadToUiDeg(pose) {
     ry: THREE.MathUtils.radToDeg(pose.ry || 0),
     rz: THREE.MathUtils.radToDeg(pose.rz || 0),
   };
+  if (!referenceUiPose) return uiPose;
+  const unwrapped = unwrapEulerDeg(uiPose, referenceUiPose);
+  return { ...uiPose, ...unwrapped };
 }
 
 function poseUiDegToRad(pose) {
@@ -482,7 +498,7 @@ function syncViewerFromRobot() {
 function syncTaskUiFromRobot() {
   if (!kinematics) return;
   const pose = kinematics.getEndEffectorPose();
-  const uiPose = poseRadToUiDeg(pose);
+  const uiPose = poseRadToUiDeg(pose, taskUI?.getPose?.() ?? null);
   taskUI.setPose(uiPose);
   syncTaskInputFromPose(uiPose, { force: false });
 }
@@ -504,7 +520,7 @@ function syncMeta() {
   if (!pose) return;
 
   refreshPoseReadout();
-  const uiPose = poseRadToUiDeg(pose);
+  const uiPose = poseRadToUiDeg(pose, taskUI?.getPose?.() ?? null);
   taskUI.setPose(uiPose);
   syncTaskInputFromPose(uiPose, { force: false });
 
@@ -1145,7 +1161,10 @@ const kinematicsLab = kinematicsLabContainerEl
 const taskUI = new TaskSpaceUI(taskSpaceContainerEl, {
   onReadCurrent: () => {
     if (!kinematics) return;
-    const uiPose = poseRadToUiDeg(kinematics.getEndEffectorPose());
+    const uiPose = poseRadToUiDeg(
+      kinematics.getEndEffectorPose(),
+      taskUI.getPose()
+    );
     taskUI.setPose(uiPose);
     syncTaskInputFromPose(uiPose, { force: true });
   },
@@ -1318,7 +1337,7 @@ taskInputUI.build();
 
 function getActualTaskPoseUi() {
   if (!kinematics) return null;
-  return poseRadToUiDeg(kinematics.getEndEffectorPose());
+  return poseRadToUiDeg(kinematics.getEndEffectorPose(), taskUI?.getPose?.() ?? null);
 }
 
 function syncTaskInputFromPose(poseUi, { force = false } = {}) {
@@ -1446,8 +1465,9 @@ viewer.callbacks.onTaskMove = (pose) => {
   const targetPose = transformPoseToRobotPose(pose);
   if (!targetPose) return;
 
-  taskUI.setPose(poseRadToUiDeg(targetPose));
-  syncTaskInputFromPose(poseRadToUiDeg(targetPose), { force: true });
+  const gizmoUiPose = poseRadToUiDeg(targetPose, taskUI.getPose());
+  taskUI.setPose(gizmoUiPose);
+  syncTaskInputFromPose(gizmoUiPose, { force: true });
 
   const ok = applyTaskPoseByIK(targetPose, {
     syncJointUi: true,

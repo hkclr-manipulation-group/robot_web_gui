@@ -84,7 +84,8 @@ const _streamTempEuler = new THREE.Euler();
 /** Reject per-frame Euler branch flips when orientation barely changed (Qt uses quat in state panel). */
 const STREAM_ORIENTATION_STABLE_RAD = THREE.MathUtils.degToRad(0.05);
 
-function unwrapEulerDeg(next, prev) {
+/** Keep Euler degrees continuous vs a prior UI pose (±360 wraps, same orientation). */
+export function unwrapEulerDeg(next, prev) {
   const unwrap = (value, reference) => {
     let v = value;
     while (v - reference > 180) v -= 360;
