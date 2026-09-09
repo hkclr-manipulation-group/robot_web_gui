@@ -395,7 +395,7 @@
   <link name="arm_end_effector">
   </link>
   <joint name="J7" type="fixed">
-    <origin rpy="0 0 0" xyz="0 0 0.0146"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
     <parent link="L6"/>
     <child link="arm_end_effector"/>
   </joint>
