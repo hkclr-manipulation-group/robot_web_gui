@@ -8,7 +8,7 @@ A GitHub Pages friendly robot GUI with these pieces already wired together:
 - joint-space control with sliders
 - 6-DoF task-space control with sliders
 - browser-side numerical IK
-- teach / playback via Spark2 SDK (`start_teach` / `reset_playback` / `start_playback`)
+- teach / playback via robot_sdk (`start_teach` / `reset_playback` / `start_playback`)
 - multi-robot selector for WiFi robot setups
 - local gateway example for forwarding commands to real robots
 
@@ -60,4 +60,7 @@ In the GUI:
 - The included IK is a generic damped least-squares numerical solver, meant for lightweight web control and preview.
 - Collision checking is not included.
 - For a production system, replace the demo gateway logic with your real robot protocol, safety checks, and watchdogs.
-  Example: python3 server_examples/rt_control_server.py
+  Example (requires `pip install` of `robot_sdk` from your SDK release wheel):
+  `python3 server_examples/rt_control_server.py`
+  Optional env: `ROBOT_RT_IP=192.168.x.x` when LAN auto-discovery is unavailable.
+  `ROBOT_RT_IP=192.168.10.147 python3 server_examples/rt_control_server.py`

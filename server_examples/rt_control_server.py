@@ -5,7 +5,6 @@ import gc
 import json
 import math
 import os
-import re
 import sys
 import threading
 import time
@@ -13,121 +12,91 @@ import traceback
 
 repo_path = os.path.dirname(os.path.dirname(__file__))
 parent_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-spark2_sdk_path = os.path.join(parent_path, "spark2_sdk_internal", "build", "install", "python")
-sys.path.insert(0, spark2_sdk_path)
 
-from spark2_sdk import (
-    Spark2,
-    JointState1f,
-    JointState6b,
-    JointState6f,
+
+def _robot_sdk_wheel_hint():
+    root = os.environ.get("ROBOT_SDK_ROOT", "").strip()
+    if not root:
+        root = os.path.join(
+            parent_path,
+            "robot_sdk-1.3.1-20261013-152751-linux_x86_64-gcc_linux",
+        )
+    ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    return os.path.join(
+        root, "bindings", "python", f"robot_sdk-1.3.1-cp{ver}-cp{ver}-linux_x86_64.whl"
+    )
+
+
+try:
+    from robot_sdk import (
+    Robot,
+    RobotError,
+    RtConnectionInfo,
+    SmoothingMethod,
+    enumerate_robots,
     Pose,
     Position,
     EulerAngle,
-    SmoothingMethod,
-)
+    Quaternion,
+    )
+except ImportError as exc:
+    wheel = _robot_sdk_wheel_hint()
+    raise ImportError(
+        f"{exc}. Install the release wheel, for example: pip install {wheel}"
+    ) from exc
 
 KNOWN_ROBOT_IDS = {"spark2", "preview-arm"}
 
 SEND_LOCK_TIMEOUT_SEC = 30.0
 STREAM_INTERVAL_SEC = 0.01
 
-_CONFIG_VARIANTS = ("spark2_v2", "spark2_v1")
+def _resolve_rt_connection_info():
+    """RT server target: ROBOT_RT_IP / RT_SERVER_IP, else auto-discover on connect()."""
+    ip = (
+        os.environ.get("ROBOT_RT_IP", "").strip()
+        or os.environ.get("RT_SERVER_IP", "").strip()
+    )
+    if ip:
+        return RtConnectionInfo.to(ip)
+    return RtConnectionInfo()
 
 
-def resolve_config_prefix_path():
-    """Resolve Spark2 SDK config prefix (directory containing config.yaml)."""
-    explicit = os.environ.get("SPARK2_CONFIG_PREFIX", "").strip()
-    if explicit:
-        return explicit.rstrip("/")
-
-    default = os.path.join(parent_path, "cuarm_configuration", "spark2_v2")
-    if os.path.isfile(os.path.join(default, "config.yaml")):
-        return default
-
-    config_root = os.environ.get("CONFIG_PREFIX_PATH", "").strip().rstrip("/")
-    if config_root:
-        if os.path.isfile(os.path.join(config_root, "config.yaml")):
-            return config_root
-        for variant in _CONFIG_VARIANTS:
-            candidate = os.path.join(config_root, variant)
-            if os.path.isfile(os.path.join(candidate, "config.yaml")):
-                return candidate
-
-    return default
+def _ensure_ok(result, context=""):
+    if not result.ok:
+        prefix = f"{context}: " if context else ""
+        raise RuntimeError(f"{prefix}{result.message} ({result.code.name})")
 
 
-def _keys_path_from_config(config_prefix):
-    """Resolve keys.json path from config.yaml rt_control.keys_path (default: keys.json)."""
-    config_yaml = os.path.join(config_prefix, "config.yaml")
-    keys_rel = "keys.json"
-    try:
-        with open(config_yaml, encoding="utf-8") as fh:
-            in_rt = False
-            for line in fh:
-                if line.strip().startswith("rt_control:"):
-                    in_rt = True
-                    continue
-                if in_rt and line and not line.startswith((" ", "\t")):
-                    break
-                match = re.match(r"\s+keys_path:\s*(\S+)", line)
-                if in_rt and match:
-                    keys_rel = match.group(1).strip("\"'")
-                    break
-    except Exception:
-        pass
-    return os.path.normpath(os.path.join(config_prefix, keys_rel))
-
-
-def _fallback_keys_paths():
-    candidates = []
-    env_keys = os.environ.get("SPARK2_KEYS_JSON", "").strip()
-    if env_keys:
-        candidates.append(env_keys)
-    candidates.extend([
-        os.path.join(parent_path, "spark2_sdk", "configuration", "keys.json"),
-        os.path.join(parent_path, "cuarm_rt_control", "src", "keys.json"),
-        os.path.join(parent_path, "cuarm_upper_software", "src", "keys.json"),
-    ])
-    return candidates
-
-
-def _ensure_client_keys(config_prefix):
-    """Ensure keys.json exists where Spark2 SDK expects it."""
-    keys_path = _keys_path_from_config(config_prefix)
-    if os.path.isfile(keys_path):
-        return keys_path
-
-    for candidate in _fallback_keys_paths():
-        if not os.path.isfile(candidate):
-            continue
-        os.makedirs(os.path.dirname(keys_path) or config_prefix, exist_ok=True)
-        try:
-            os.symlink(os.path.abspath(candidate), keys_path)
-            print(f"Linked client keys: {keys_path} -> {candidate}")
-            return keys_path
-        except FileExistsError:
-            if os.path.isfile(keys_path):
-                return keys_path
-        except OSError:
-            import shutil
-            shutil.copy2(candidate, keys_path)
-            print(f"Copied client keys to {keys_path} from {candidate}")
-            return keys_path
-
-    raise RuntimeError(
-        f"Client keys not found at {keys_path}. "
-        "Set SPARK2_KEYS_JSON, copy keys.json into the config prefix, or add "
-        "rt_control.keys_path in config.yaml (for example "
-        "../../cuarm_rt_control/src/keys.json)."
+def _euler_xyz_to_quaternion(roll, pitch, yaw):
+    """Intrinsic XYZ (matches THREE.js / Web GUI task-space commands)."""
+    c1, s1 = math.cos(roll / 2), math.sin(roll / 2)
+    c2, s2 = math.cos(pitch / 2), math.sin(pitch / 2)
+    c3, s3 = math.cos(yaw / 2), math.sin(yaw / 2)
+    return Quaternion(
+        w=c1 * c2 * c3 - s1 * s2 * s3,
+        x=s1 * c2 * c3 + c1 * s2 * s3,
+        y=c1 * s2 * c3 - s1 * c2 * s3,
+        z=c1 * c2 * s3 + s1 * s2 * c3,
     )
 
 
-CONFIG_PREFIX_PATH = resolve_config_prefix_path()
-try:
-    _ensure_client_keys(CONFIG_PREFIX_PATH)
-except RuntimeError as exc:
-    print(f"Warning: {exc}")
+def _quaternion_to_euler_xyz(quat):
+    """Inverse of _euler_xyz_to_quaternion (intrinsic XYZ)."""
+    w, x, y, z = quat.w, quat.x, quat.y, quat.z
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+
+    sinp = 2 * (w * y - z * x)
+    if abs(sinp) >= 1:
+        pitch = math.copysign(math.pi / 2, sinp)
+    else:
+        pitch = math.asin(sinp)
+
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+    return EulerAngle(roll=roll, pitch=pitch, yaw=yaw)
 
 
 # Jog defaults (aligned with robot_web_gui/js/config.js SLIDER_CONTROL); overridable per request.
@@ -171,49 +140,24 @@ _SMOOTHING_BY_NAME = {
 def _get_robot():
     global robot
     if robot is None:
-        config_yaml = os.path.join(CONFIG_PREFIX_PATH, "config.yaml")
-        if not os.path.isfile(config_yaml):
-            raise RuntimeError(
-                f"Spark2 config not found: {config_yaml}. "
-                "Set SPARK2_CONFIG_PREFIX to a directory that contains config.yaml "
-                "(for example .../cuarm_configuration/spark2_v2)."
-            )
-        robot = Spark2(CONFIG_PREFIX_PATH)
+        robot = Robot()
     return robot
 
 
-def _panel_udp_port():
-    config_yaml = os.path.join(CONFIG_PREFIX_PATH, "config.yaml")
-    try:
-        with open(config_yaml, encoding="utf-8") as fh:
-            in_panel = False
-            for line in fh:
-                if line.strip().startswith("panel:"):
-                    in_panel = True
-                    continue
-                if in_panel and line and not line.startswith((" ", "\t")):
-                    break
-                match = re.match(r"\s+port:\s*(\d+)", line)
-                if in_panel and match:
-                    return int(match.group(1))
-    except Exception:
-        pass
-    return 12309
-
-
-def _panel_port_holder_hint(port):
-    return (
-        f"Panel UDP port {port} is unavailable (already in use). "
-        "Close Qt upper software and any other rt_control_server.py instance, "
-        f"then run: ss -ulnp | grep {port}"
-    )
+def _connect_robot_session(robot_instance):
+    info = _resolve_rt_connection_info()
+    result = robot_instance.connect(info)
+    if not result.ok and not info.server_ip:
+        discovered = enumerate_robots()
+        if discovered:
+            result = robot_instance.connect(discovered[0])
+    _ensure_ok(result, "connect")
 
 
 def _format_runtime_error(exc):
-    message = str(exc)
-    if "Failed to initialize UDP node" in message or "Failed to initialize UDP communication" in message:
-        return _panel_port_holder_hint(_panel_udp_port())
-    return message
+    if isinstance(exc, RobotError):
+        return str(exc)
+    return str(exc)
 
 
 def request_runtime_connect():
@@ -231,14 +175,14 @@ def _stop_jog_state():
 
 
 def _reset_robot_session():
-    """Release Spark2 UDP resources so panel port can be reused after a failed start()."""
+    """Release robot_sdk session (disconnect transport)."""
     global robot, robot_started, robot_hardware_connected, teach_active
     _stop_jog_state()
     if robot is not None:
         old_robot = robot
         robot = None
         try:
-            old_robot.stop()
+            old_robot.disconnect()
         except Exception:
             pass
         del old_robot
@@ -249,7 +193,7 @@ def _reset_robot_session():
 
 
 def ensure_robot_runtime():
-    """Start Spark2 UDP session for /stream (panel simulation until Connect)."""
+    """Connect robot_sdk to rt_control for /stream (telemetry before Web Connect)."""
     global robot_started, teach_active
 
     request_runtime_connect()
@@ -262,7 +206,7 @@ def ensure_robot_runtime():
             return True, "Success"
         try:
             robot_instance = _get_robot()
-            robot_instance.start_stream()
+            _connect_robot_session(robot_instance)
             robot_started = True
             teach_active = False
         except Exception:
@@ -272,7 +216,7 @@ def ensure_robot_runtime():
 
 
 def ensure_hardware_control():
-    """Connect to real hardware: simulation=false, setup transition, enable all joints."""
+    """Enable all arm joints after RT connect (Web UI Connect)."""
     global robot_hardware_connected
 
     ensure_robot_runtime()
@@ -280,16 +224,14 @@ def ensure_hardware_control():
         return True, "Success"
 
     robot_instance = _get_robot()
-    robot_instance.connect_hardware()
-    robot_instance.enable_arm_joint(
-        JointState6b([True, True, True, True, True, True])
-    )
+    mask = list(robot_instance.all_enabled_mask())
+    _ensure_ok(robot_instance.enable_arm_joint(mask), "enable_arm_joint")
     robot_hardware_connected = True
     return True, "Success"
 
 
 def release_hardware_control():
-    """Return to simulation mode; keep UDP stream alive."""
+    """Disable arm joints; keep RT session alive for /stream."""
     global robot_hardware_connected, teach_active
 
     if not robot_started:
@@ -297,13 +239,47 @@ def release_hardware_control():
 
     robot_instance = _get_robot()
     if teach_active:
-        robot_instance.stop_teach()
+        _ensure_ok(robot_instance.stop_teach(), "stop_teach")
         teach_active = False
     if robot_hardware_connected:
-        robot_instance.disconnect_hardware()
+        n = robot_instance.joint_count()
+        _ensure_ok(
+            robot_instance.enable_arm_joint([False] * n),
+            "disable_arm_joint",
+        )
         robot_hardware_connected = False
     _stop_jog_state()
     return True, "Success"
+
+
+def _jog_tick(robot_instance, space, cmds, speed, acc_time):
+    if hasattr(robot_instance, "jog_joint") and hasattr(robot_instance, "jog_cartesian"):
+        if space == "joint":
+            _ensure_ok(robot_instance.jog_joint(cmds, speed, acc_time), "jog_joint")
+        elif space == "cartesian":
+            _ensure_ok(
+                robot_instance.jog_cartesian(cmds, speed, acc_time),
+                "jog_cartesian",
+            )
+        return
+
+    if space == "joint":
+        n = robot_instance.joint_count()
+        max_vel = 30.0 * max(1, min(100, int(speed))) / 100.0
+        vel = [0.0] * n
+        for i in range(min(len(cmds), n)):
+            if cmds[i] == 1:
+                vel[i] = max_vel
+            elif cmds[i] == 2:
+                vel[i] = -max_vel
+        _ensure_ok(robot_instance.move_vel(vel, a=10, t=acc_time), "move_vel")
+        return
+
+    if space == "cartesian":
+        raise RuntimeError(
+            "Cartesian jog requires robot_sdk.internal (streaming jog). "
+            "Use joint jog, incremental task sliders, or install the internal SDK wheel."
+        )
 
 
 def _jog_worker():
@@ -322,11 +298,7 @@ def _jog_worker():
                     time.sleep(interval_sec)
                     continue
                 try:
-                    robot_instance = _get_robot()
-                    if space == "joint":
-                        robot_instance.jog_joint(cmds, speed, acc_time)
-                    elif space == "cartesian":
-                        robot_instance.jog_cartesian(cmds, speed, acc_time)
+                    _jog_tick(_get_robot(), space, cmds, speed, acc_time)
                 finally:
                     send_to_robot_lock.release()
             except Exception as exc:
@@ -404,8 +376,14 @@ def jog_stop(robot_id, payload):
     _stop_jog_state()
 
     def action():
-        if robot_started:
-            _get_robot().jog_stop()
+        if not robot_started:
+            return
+        robot_instance = _get_robot()
+        if hasattr(robot_instance, "jog_stop"):
+            _ensure_ok(robot_instance.jog_stop(), "jog_stop")
+            return
+        n = robot_instance.joint_count()
+        _ensure_ok(robot_instance.move_vel([0.0] * n, a=10, t=0.0), "move_vel")
 
     return execute_robot_action(robot_id, action)
 
@@ -424,7 +402,7 @@ def _runtime_startup_worker():
         try:
             ensure_robot_runtime()
             last_stream_error = ""
-            print("Spark2 runtime connected to rt_control (simulation mode, stream only).")
+            print("robot_sdk connected to rt_control (stream active; click Connect to enable joints).")
         except Exception as exc:
             last_stream_error = _format_runtime_error(exc)
             print(f"Waiting for rt_control... {last_stream_error}")
@@ -464,7 +442,10 @@ def _motion_timing_from_payload(payload, default_acc_time):
 
 def _apply_smoothing(robot_instance, method):
     if method is not None:
-        robot_instance.set_arm_smoothing_method(method)
+        _ensure_ok(
+            robot_instance.set_arm_smoothing_method(method),
+            "set_arm_smoothing_method",
+        )
 
 
 def _joint_values_from_payload(payload):
@@ -499,12 +480,10 @@ def _deg_list_to_rad(values):
     return [math.radians(v) for v in values]
 
 
-def _pose_from_euler_rad(robot_instance, pose_values):
+def _pose_from_euler_rad(_robot_instance, pose_values):
     """Web GUI task-space commands use meters + intrinsic XYZ Euler radians."""
     x, y, z, rx, ry, rz = pose_values[:6]
-    quat = robot_instance.get_kinematics().euler_to_quaternion(
-        EulerAngle(roll=rx, pitch=ry, yaw=rz)
-    )
+    quat = _euler_xyz_to_quaternion(rx, ry, rz)
     return Pose(position=Position(x=x, y=y, z=z), orientation=quat)
 
 
@@ -524,15 +503,14 @@ def _ee_pose_stream_values(robot_instance):
 
 
 def _joint_pos_stream_values(robot_instance):
-    joint_pos_deg = robot_instance.get_pos().arm.to_list()
+    joint_pos_deg = list(robot_instance.joint_positions())
     return [_deg_list_to_rad(joint_pos_deg)]
 
 
 def _gripper_pos_stream_value(robot_instance):
     try:
-        gripper = robot_instance.get_pos().gripper
-        values = gripper.to_list() if gripper is not None else []
-        return float(values[0]) if values else None
+        gripper = list(robot_instance.get_joint_state().gripper)
+        return float(gripper[0]) if gripper else None
     except Exception:
         return None
 
@@ -547,7 +525,7 @@ def _read_stream_state():
             "joint_pos": [[0.0] * 6],
             "gripper_pos": None,
             "hardware_connected": False,
-            "error": last_stream_error or "Waiting for rt_control (start cuarm_rt_control first).",
+            "error": last_stream_error or "Waiting for rt_control (start RT server, set ROBOT_RT_IP if needed).",
         }
 
     try:
@@ -593,9 +571,9 @@ def execute_robot_action(robot_id, action, require_connection=True, require_hard
     try:
         if require_connection and not robot_started:
             return False, (
-                "Robot runtime not ready. Start cuarm_rt_control, then wait for "
-                "'Spark2 runtime connected to rt_control (simulation mode, stream only).' "
-                "in the gateway log."
+                "Robot runtime not ready. Start rt_control on the robot/PC, set "
+                "ROBOT_RT_IP when auto-discovery fails, then wait for "
+                "'robot_sdk connected to rt_control' in the gateway log."
             )
         if require_hardware and not robot_hardware_connected:
             return False, (
@@ -650,10 +628,13 @@ def move_joint(robot_id, payload):
         robot_instance = _get_robot()
         _apply_smoothing(robot_instance, method)
         if path == "/home":
-            robot_instance.go_home(speed, acc_time)
+            _ensure_ok(robot_instance.go_home(speed, acc_time), "go_home")
         else:
             joint_values_deg = _rad_list_to_deg(joint_values)
-            robot_instance.move_pos(JointState6f(joint_values_deg), speed, acc_time)
+            _ensure_ok(
+                robot_instance.move_pos(joint_values_deg, speed, acc_time),
+                "move_pos",
+            )
             print(
                 f"[move_joint] path={path}, joints_rad={joint_values}, "
                 f"joints_deg={joint_values_deg}, t={acc_time}, v={speed}"
@@ -682,7 +663,10 @@ def move_pose(robot_id, payload):
         robot_instance = _get_robot()
         _apply_smoothing(robot_instance, method)
         target_pose = _pose_from_euler_rad(robot_instance, pose_values)
-        robot_instance.move_ee_point(target_pose, speed, acc_time)
+        _ensure_ok(
+            robot_instance.move_ee_point(target_pose, speed, acc_time),
+            "move_ee_point",
+        )
         print(f"[move_pose] target={pose_values}, t={acc_time}, v={speed}")
 
     return execute_robot_action(robot_id, action)
@@ -707,8 +691,7 @@ def move_pose_incremental(robot_id, payload):
         _apply_smoothing(robot_instance, method)
 
         current_pose = robot_instance.get_ee_pose()
-        kinematics = robot_instance.get_kinematics()
-        current_euler = kinematics.quaternion_to_euler(current_pose.orientation)
+        current_euler = _quaternion_to_euler_xyz(current_pose.orientation)
 
         dx, dy, dz, drx, dry, drz = pose_delta_values[:6]
         target_pose = _pose_from_euler_rad(
@@ -722,7 +705,10 @@ def move_pose_incremental(robot_id, payload):
                 current_euler.yaw + drz,
             ],
         )
-        robot_instance.move_ee_point(target_pose, speed, acc_time)
+        _ensure_ok(
+            robot_instance.move_ee_point(target_pose, speed, acc_time),
+            "move_ee_point",
+        )
         print(f"[move_pose_incremental] delta={pose_delta_values}, t={acc_time}, v={speed}")
 
     return execute_robot_action(robot_id, action)
@@ -758,7 +744,10 @@ def move_gripper(robot_id, payload):
 
     def action():
         robot_instance = _get_robot()
-        robot_instance.move_gripper_pos(JointState1f(gripper_pos), speed, acc_time)
+        _ensure_ok(
+            robot_instance.move_gripper_pos([gripper_pos], speed, acc_time),
+            "move_gripper_pos",
+        )
         print(f"[move_gripper] pos={gripper_pos}, t={acc_time}, v={speed}")
 
     return execute_robot_action(robot_id, action)
@@ -771,10 +760,10 @@ def enable_teach(robot_id, payload):
         global teach_active
         robot_instance = _get_robot()
         if payload.get("enable", False):
-            robot_instance.start_teach()
+            _ensure_ok(robot_instance.start_teach(), "start_teach")
             teach_active = True
         else:
-            robot_instance.stop_teach()
+            _ensure_ok(robot_instance.stop_teach(), "stop_teach")
             teach_active = False
 
     return execute_robot_action(robot_id, action, require_hardware=True)
@@ -794,11 +783,11 @@ def control_playback(robot_id, payload):
     def run():
         robot_instance = _get_robot()
         if action == "reset":
-            robot_instance.reset_playback()
+            _ensure_ok(robot_instance.reset_playback(), "reset_playback")
         elif action == "start":
-            robot_instance.start_playback()
+            _ensure_ok(robot_instance.start_playback(), "start_playback")
         else:
-            robot_instance.stop_playback()
+            _ensure_ok(robot_instance.stop_playback(), "stop_playback")
         print(f"[playback] action={action}")
 
     return execute_robot_action(robot_id, run, require_hardware=True)
@@ -987,14 +976,18 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 if __name__ == "__main__":
-    print(f"Spark2 SDK config prefix: {CONFIG_PREFIX_PATH}")
-    print("Recommended: start spark2_v2_rt_control first, then open the Web UI.")
+    rt_info = _resolve_rt_connection_info()
+    if rt_info.server_ip:
+        print(f"robot_sdk RT target: {rt_info.server_ip}")
+    else:
+        print("robot_sdk RT target: auto-discover (set ROBOT_RT_IP for a fixed host)")
+    print("Recommended: start rt_control first, then open the Web UI.")
     threading.Thread(target=_runtime_startup_worker, daemon=True).start()
     threading.Thread(target=_jog_worker, daemon=True).start()
     try:
         server = ThreadedHTTPServer(("0.0.0.0", 9000), Handler)
         print("Gateway listening on http://0.0.0.0:9000")
-        print("Using Spark2 Python SDK.")
+        print("Using robot_sdk Python API (see robot_sdk-1.3.1 docs).")
         print("State stream connects on first /stream or /ping (after rt_control is up).")
         server.serve_forever()
     except KeyboardInterrupt:
